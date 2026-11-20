@@ -71,7 +71,7 @@
   </div>
   <!-- ログインゲート(2026-08-26新設、ユーザー指示「家族や会社で共有する
        場合もあるので、ログインセキュリティシステムを導入しますか?」への
-       対応)。既定は非表示——`GET /v1/auth/config`がlogin_required:true を
+       対応)。既定は非表示——`POST /openenglish.v1.Auth/ConfigGet`がlogin_required:true を
        返した場合のみ、`app.js`がこのオーバーレイを表示しページ全体を
        覆う。実際のアクセス制御はサーバー側(/v1/db/*へのrequire_session
        ゲート)が行うため、ここは主にUX上の導線。 -->
@@ -1592,14 +1592,14 @@ cd aruaru-db
         an embedded <code>vault.html</code> iframe (same isolation design as the freelance corner's
         GitHub push feature) — it never touches this page's (index.html) own JavaScript. The vault
         sends the token to <strong>open-cg-cad's own server</strong>
-        (<code>POST /v1/agent/github/commit</code>), which uses it once to call the GitHub API and
+        (<code>POST /openenglish.v1.Agent/GithubCommit</code>), which uses it once to call the GitHub API and
         does not persist it to disk. See <a href="vault.html" target="_blank" rel="noopener">vault.html</a>
         and CLAUDE.md (2026-08-27) for details. For real isolation benefit, serve vault.html from a
         different origin than this page — see the note in the section above.<br /><br />
         <strong>正直な開示：</strong>GitHubトークンの復号・利用は、埋め込まれた<code>vault.html</code>
         のiframe内でのみ行われます(フリーランス開発コーナーのGitHub push機能と同じ隔離設計)——
         このページ(index.html)自身のJavaScriptには一切渡りません。vaultは
-        <strong>open-cg-cadサーバー自身</strong>(<code>POST /v1/agent/github/commit</code>)へ
+        <strong>open-cg-cadサーバー自身</strong>(<code>POST /openenglish.v1.Agent/GithubCommit</code>)へ
         トークンを送り、そこで1回だけGitHub APIの呼び出しに使われ、ディスクへは保存されません。
         詳細は<a href="vault.html" target="_blank" rel="noopener">vault.html</a>とCLAUDE.md
         (2026-08-27)を参照してください。本当の分離効果を得るには、上のセクションの注記通り、
@@ -1996,7 +1996,7 @@ cd aruaru-db
 
   <!-- 2026-08-25新設(ユーザー指示「バックアップ先入力欄が1本のテキスト
        欄だけでは分かりにくいので、エクスプローラーの様な物を」への対応)。
-       サーバー側の新規GET /v1/fs/list-dir(読み取り専用、フォルダ名のみ
+       サーバー側の新規POST /openenglish.v1.Fs/ListDir(読み取り専用、フォルダ名のみ
        返す)を使ったフォルダブラウザ。ブラウザ標準のFile System Access
        APIは選んだフォルダの絶対パス文字列をJSへ渡さない設計のため
        (セキュリティ上の理由)、rsync等に必要な実際のパス文字列を得る
@@ -2424,7 +2424,7 @@ cd aruaru-db
         書き込みは<strong>2つのデータベースそれぞれ独立に</strong>行われます——片方が停止・接続不能でも、
         もう片方への書き込みはそのまま完了し、学習の進行(HTTPリクエスト)も止まりません。
         失敗した側だけがサーバーのログに記録されます。現在の設定状態は
-        <code>GET /v1/db/info</code> の <code>dual_mirror</code> / <code>mirror_targets</code> で確認できます。<br />
+        <code>POST /openenglish.v1.Db/Info</code> の <code>dual_mirror</code> / <code>mirror_targets</code> で確認できます。<br />
         <strong>正直な但し書き</strong>: 実装したのは「書き込み時に両方へ送る」ところまでです。
         <strong>片方が停止していた期間に取りこぼした行を、復旧後に自動で追いつかせる自己修復機能は
         実装していません</strong>(その場合はバックアップからのリストアが必要です)。TLS対応は
@@ -2452,7 +2452,7 @@ cd aruaru-db
         <strong>fully independent</strong>: if one database is down or unreachable, the write to the other still
         completes and your session is never interrupted — only the failing side is noted in the server log. You can
         check the current configuration via <code>dual_mirror</code> and <code>mirror_targets</code> in
-        <code>GET /v1/db/info</code>. <strong>Honest caveats</strong>: what is implemented is sending each write to
+        <code>POST /openenglish.v1.Db/Info</code>. <strong>Honest caveats</strong>: what is implemented is sending each write to
         both targets. <strong>There is no self-healing catch-up</strong> that replays rows missed while one side was
         down (you would restore from a backup instead). TLS support was added on 2026-08-24, but this
         development machine has no cargo/psql/Docker available to test it end to end (see the section above).
@@ -2624,7 +2624,7 @@ cd aruaru-db
         multiple-choice knowledge questions and are no substitute for real practice.
       </p>
       <p class="setup-honest">
-        採点結果は既存の学習履歴の仕組み(<code>/v1/db/history</code>)に保存されます。
+        採点結果は既存の学習履歴の仕組み(<code>/openenglish.v1.Db/HistoryGet</code>)に保存されます。
         aruaru-db / PostgreSQL を設定していない場合はアプリ内蔵のローカルDB(SQLite)にのみ残ります。<br />
         Scores are stored through the existing history endpoint; without aruaru-db/PostgreSQL they stay
         in the app's local SQLite only.

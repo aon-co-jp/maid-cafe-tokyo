@@ -437,7 +437,7 @@ fn sync_web_assets(root: &Path) {
 async fn maybe_launch_aruaru_llm() {
     let aruaru_llm_bind = std::env::var("ARUARU_LLM_BIND").unwrap_or_else(|_| "127.0.0.1:4600".to_string());
     let health_url = format!("http://{aruaru_llm_bind}/healthz");
-    let client = reqwest::Client::builder()
+    let client = reqwest::Client::builder().default_headers(crate::llm_tenant_headers())
         .timeout(std::time::Duration::from_millis(700))
         .build()
         .expect("building a minimal reqwest client cannot fail");
@@ -733,6 +733,13 @@ pub(crate) fn llm_connect_url(method: &str) -> String {
     format!("{}/aruaru_llm.v1.Llm/{}", aruaru_llm_base_url(), method)
 }
 
+/// aruaru-llm の受付制御(サイト別公平キュー)に使うサイト名ヘッダ。全ての aruaru-llm 呼び出しに付ける。
+pub(crate) fn llm_tenant_headers() -> reqwest::header::HeaderMap {
+    let mut h = reqwest::header::HeaderMap::new();
+    h.insert("x-tenant", reqwest::header::HeaderValue::from_static("open-english"));
+    h
+}
+
 /// クエリ文字列の値のパーセントデコード(`+`は空白)。
 fn query_decode(x: &str) -> String {
     let b = x.replace('+', " ").into_bytes();
@@ -830,7 +837,7 @@ fn sanitize_public_json(v: &mut serde_json::Value) {
 /// aruaru-llm(open-cuda)の状態を、各サイトの画面が(閲覧者の端末に無くても)表示できるようにする。
 async fn proxy_aruaru_llm_get_sanitized(path: &str) -> Response {
     let url = llm_connect_url(path);
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(10)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -873,7 +880,7 @@ mod sanitize_tests {
 
 async fn proxy_aruaru_llm_get(path: &str) -> Response {
     let url = llm_connect_url(path);
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(15)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -894,7 +901,7 @@ async fn proxy_aruaru_llm_get(path: &str) -> Response {
 /// `download-smaller`はaruaru-llm側もPOSTだがボディを取らない)。
 async fn proxy_aruaru_llm_get_as_post(path: &str) -> Response {
     let url = llm_connect_url(path);
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(600)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(600)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -919,7 +926,7 @@ async fn proxy_aruaru_llm_post(path: &str, req: Request) -> Response {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(600)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(600)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -966,7 +973,7 @@ async fn public_freelance_job_search(req: Request) -> Response {
         "max_results": 5,
         "free_only": true,
     });
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(30)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(30)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -1062,7 +1069,7 @@ async fn public_aruaru_llm_select(req: Request) -> Response {
             }),
         );
     }
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(15)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -1175,7 +1182,7 @@ async fn public_aruaru_llm_generate(path: &str, req: Request) -> Response {
 /// (訪問者自身の`127.0.0.1`を指してしまい無関係な接続先になっていた
 /// バグ)を繰り返さないよう、可否のbool値だけを返す設計にする。
 async fn aruaru_llm_reachable_from_server() -> bool {
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_millis(1500)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_millis(1500)).build() {
         Ok(c) => c,
         Err(_) => return false,
     };
@@ -1213,7 +1220,7 @@ async fn public_chat_provider_complete_priority(req: Request) -> Response {
         Ok(v) => v,
         Err(resp) => return resp,
     };
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(60)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(60)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response_cors(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -1236,7 +1243,7 @@ async fn public_chat_provider_complete_priority(req: Request) -> Response {
 /// 無料AI」表示用。aruaru-llmの`GET /v1/chat-providers/active`(使用中・予備・お休み中の
 /// AI名のみ、キー等は含まない)をそのまま中継する。読み取り専用・軽量のためレート制限は課さない。
 async fn public_chat_provider_active() -> Response {
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(5)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(5)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response_cors(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -1254,7 +1261,7 @@ async fn public_chat_provider_active() -> Response {
 /// ハードウェア推奨を1回でまとめて返す(管理画面が1リクエストで
 /// 「選択可能な一覧」を描画できるように)。
 async fn admin_aruaru_llm_models() -> Response {
-    let client = match reqwest::Client::builder().timeout(std::time::Duration::from_secs(15)).build() {
+    let client = match reqwest::Client::builder().default_headers(crate::llm_tenant_headers()).timeout(std::time::Duration::from_secs(15)).build() {
         Ok(c) => c,
         Err(e) => return rs_json_response(StatusCode::INTERNAL_SERVER_ERROR, &serde_json::json!({"error": format!("failed to build HTTP client: {e}")})),
     };
@@ -1986,17 +1993,10 @@ async fn news_ask(req: Request) -> Response {
     if q.trim().is_empty() {
         return rs_json_response_cors(StatusCode::BAD_REQUEST, &serde_json::json!({"ok": false, "error": "q is required / qが必要です"}));
     }
-    let learn_on = query_param(&req, "learn").as_deref() == Some("1");
-    let learn_ok = learn_on && is_local_request(&req);
     let q2 = q.clone();
     let mut v = tokio::task::spawn_blocking(move || news_qa::ask(&q2)).await.unwrap_or_else(|_| serde_json::json!({"ok": false}));
     // 保存した記事に該当が無いとき: 「分かりません」ではなく、Google・YouTubeの検索へのリンクと、ウェブ検索の結果を返す
     if v["ok"] == true && v["found"].as_i64() == Some(0) {
-        // 辞書を育てる学習は既定OFF。インストールした本人のPC(localhost)で、本人が learn=1 を付けた時だけ、言葉だけを数える
-        if learn_ok {
-            let q3 = q.clone();
-            let _ = tokio::task::spawn_blocking(move || news_qa::record_unanswered(&q3)).await;
-        }
         v = news_qa::with_fallback(v, &q).await;
     }
     rs_json_response_cors(StatusCode::OK, &v)

@@ -280,7 +280,7 @@
 > - See the 2026-08-25 entry in [CLAUDE.md](CLAUDE.md).
 >
 > 📌 **Update (2026-08-25, cont. 2): added bulk pairing**:
-> - Added a "🏢 Bulk pairing" feature (`POST /v1/world-lab/pair/bulk`)
+> - Added a "🏢 Bulk pairing" feature (`POST /openenglish.v1.WorldLab/PairBulk`)
 >   for offices/large stores with many PCs/tablets/phones — paste
 >   newline-separated device names and pair them all in one action.
 > - **The core principle is unchanged**: it still requires someone with
@@ -368,7 +368,7 @@
 > 📌 **Update (2026-08-24, cont. 8): "world-lab" Phase 2 — WASM
 > sandboxed compute tasks, plus a critical crash found and fixed via
 > process isolation**:
-> - Added `POST /v1/world-lab/task/run`, letting idle CPU/GPU/NPU capacity
+> - Added `POST /openenglish.v1.WorldLab/TaskRun`, letting idle CPU/GPU/NPU capacity
 >   on spare devices run arbitrary compute inside a WASM sandbox. Disabled
 >   by default (two separate opt-in flags), with no reward/incentive —
 >   this is meant as mutual aid, not a paid marketplace.
@@ -431,7 +431,7 @@
 >   SQLite `mirror_outbox` table and automatically retried by a background
 >   task (every 60s by default). Rows are retried up to 100 times by default;
 >   rows that still fail are not silently dropped — they are marked
->   `give_up` and the counts are visible via `GET /v1/db/info`
+>   `give_up` and the counts are visible via `POST /openenglish.v1.Db/Info`
 >   (`mirror_outbox_pending`/`mirror_outbox_given_up`). **Honest limits**:
 >   only writes this process itself attempted and failed are covered — rows
 >   deleted directly on the mirror, or changes made through another path,
@@ -451,13 +451,13 @@
 >   app's health-check shape matches what other repos in this ecosystem's
 >   "digital twin" (分身の術) tenant-registration pattern (open-web-server /
 >   open-easy-web) generically expect.
-> - `GET /v1/db/info` now reports `rsync_available` (an actual
+> - `POST /openenglish.v1.Db/Info` now reports `rsync_available` (an actual
 >   `rsync --version` probe) so you can check whether rsync is usable before
->   trying `/v1/db/rsync-backup`.
+>   trying `/openenglish.v1.Db/RsyncBackup`.
 > - Verified with `cargo build`/`cargo test` (18/18 green) plus a real
 >   running binary: `HEAD /` and `HEAD /app.js` return the correct
 >   Content-Length/Content-Type with an empty body, `GET /health` returns
->   `{"ok":true}`, and `GET /v1/db/info` includes `rsync_available`.
+>   `{"ok":true}`, and `POST /openenglish.v1.Db/Info` includes `rsync_available`.
 
 > 📌 **Latest update (2026-08-24): a virtual school (higher education) and a
 > virtual online vocational school**:
@@ -484,7 +484,7 @@
 >   practical skills are only approximated as multiple-choice knowledge questions** and are
 >   no substitute for real essay feedback or interview practice. Scores predict nothing
 >   about real admissions or qualifications.
-> - Scores are stored through the existing history endpoint (`/v1/db/history`); no new API
+> - Scores are stored through the existing history endpoint (`/openenglish.v1.Db/HistoryGet`); no new API
 >   was added.
 > See the 2026-08-24 HANDOFF in [CLAUDE.md](CLAUDE.md) for details.
 
@@ -560,7 +560,7 @@
 >   (elementary 1/3/6, junior high 1/3, high school 1) × a few subjects
 >   (Japanese, maths, English)** have questions so far — any other combination
 >   honestly reports "**not ready yet**" instead of pretending to be covered.
->   Scores are saved through the existing `/v1/db/history` endpoint (local
+>   Scores are saved through the existing `/openenglish.v1.Db/HistoryGet` endpoint (local
 >   SQLite, mirrored to aruaru-db when `OPEN_ENGLISH_DATABASE_URL` is set), and
 >   the course screen recommends setting up **Google Search** and **aruaru-db**
 >   for the best experience.
@@ -696,8 +696,8 @@
 > settles to **every 30 minutes** (steady interval shortened from 6 hours
 > on 2026-09-09; the 30-second maintenance phase added 2026-09-10). Also a
 > manual downgrade feature. If a new version turns out to be buggy
-> after a while, `GET /v1/updates/history` (current + retained
-> previous versions) and `POST /v1/updates/downgrade` (roll back
+> after a while, `POST /openenglish.v1.Updates/History` (current + retained
+> previous versions) and `POST /openenglish.v1.Updates/Downgrade` (roll back
 > open-english itself, aruaru-llm, or aruaru-db individually to a
 > specific version) let you revert just that one component. UI: the
 > "🔄 Updates & Rollback" section inside the "💾 Data & Model Storage"
@@ -710,8 +710,8 @@
 > 30秒ごとに本体＋関連リポジトリ全てを自動バージョンアップ〈最大約3分〉、
 > 以降は30分ごと。2026-09-09に定常間隔を6時間→30分、2026-09-10に
 > メンテナンス中30秒フェーズを追加)+
-> 手動ダウングレード機能を追加しました。`GET /v1/updates/history`・
-> `POST /v1/updates/downgrade`で、open-english本体・aruaru-llm・
+> 手動ダウングレード機能を追加しました。`POST /openenglish.v1.Updates/History`・
+> `POST /openenglish.v1.Updates/Downgrade`で、open-english本体・aruaru-llm・
 > aruaru-dbのいずれかを個別に旧バージョンへ戻せます。保持世代は
 > 既定3世代までです。詳細は[CLAUDE.md](CLAUDE.md)の2026-08-20 HANDOFF
 > 参照。
@@ -792,10 +792,10 @@
 > never sacrificed. This increment implements SQLite persistence for
 > messages/settings plus the `/v1/db/*` API, verified over real HTTP
 > (see `server/src/db.rs`). Also added: a storage-location picker
-> (`/v1/db/storage-path`), rsync backup (`/v1/db/rsync-backup`), and a
-> generic legacy-data import endpoint (`/v1/db/migrate-legacy`). If
+> (`/openenglish.v1.Db/StoragePath`), rsync backup (`/openenglish.v1.Db/RsyncBackup`), and a
+> generic legacy-data import endpoint (`/openenglish.v1.Db/MigrateLegacy`). If
 > rsync isn't installed, the API replies with a bilingual **"Let's
-> install RSync!"** prompt, and `/v1/db/install-rsync` auto-installs it
+> install RSync!"** prompt, and `/openenglish.v1.Db/InstallRsync` auto-installs it
 > via the right package manager for the OS (winget/choco on Windows,
 > apt-get/dnf/pacman on Linux, brew on macOS, pkg on Android) and
 > immediately retries the backup on success. Usage pie chart display
@@ -1099,7 +1099,7 @@ disclosure about the limits of this approach.
 
 ---
 
-## Update 2026-08-23 — `GET /v1/cpu-runtime` extended with ISA *combination* information
+## Update 2026-08-23 — `POST /openenglish.v1.CpuRuntime/CpuRuntime` extended with ISA *combination* information
 
 Previously the endpoint returned a flat list of CPU feature booleans. Since
 real CPUs carry several instruction sets simultaneously (AVX2+FMA3,
@@ -1116,7 +1116,7 @@ also includes:
 - `gfni` and `vpclmulqdq` detection
 
 Verified end-to-end by starting the server and running
-`curl http://127.0.0.1:4601/v1/cpu-runtime`. On the development machine
+`curl http://127.0.0.1:4601/openenglish.v1.CpuRuntime/CpuRuntime`. On the development machine
 (Ryzen 9 3950X, Zen 2): `isa_profile: "avx2+fma3"`, `fast_bmi2: false`,
 `detected_but_unused: "aes sha"`.
 

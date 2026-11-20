@@ -59,6 +59,9 @@
     // 消えると、更新の直後に毎回30秒メンテナンスが再実行されてしまう。
     "open-english.maintenanceDay",
     "open-english.quizNextIndex",      // 作者のオリジナル問題の巡回位置
+    "open-english.collapsed.phoneAccelBanner", "open-english.collapsed.worldLanguageBanner",
+    "open-english.collapsed.downloadRecommendBanner", "open-english.collapsed.aboutSchoolBanner",
+    "open-english.collapsed.launchPcVersionBanner", "open-english.collapsed.autorwStatusBanner",
     "open-english.newsCheckAt", "open-english.selectedAis", "open-english.cloudOff", "open-english.useLocal",        // ニュース鮮度確認の最終試行時刻
   ];
 
@@ -103,6 +106,8 @@
         return;
       }
       if (buildId !== initialBuildId) {
+        // 会話の途中は再読み込みしない(答えが消えるため)。会話が無いか、3分操作が無ければ、次の確認(5秒後)で更新する。
+        if (typeof window.__safeToReload === "function" && !window.__safeToReload()) return;
         clearOwnLocalStorage();
         if (version) localStorage.setItem(VERSION_KEY, version);
         reloadBustingCache(buildId);

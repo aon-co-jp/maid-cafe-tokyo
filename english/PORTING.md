@@ -518,7 +518,7 @@ disclosure領域に明記する。
    前者は「試験」、後者は「連続読み上げの題材」という別用途のため
    1ファイルにまとめない——UI側もそれぞれ独立に読み込める。
 2. **一覧APIと本体データを分ける**: サーバーは
-   `GET /v1/world-languages`で**問題本文を含まない**サマリ(コード・
+   `POST /openenglish.v1.WorldLanguages/WorldLanguages`で**問題本文を含まない**サマリ(コード・
    現地語表記・英名・和名・RTLか・問題数・レベル)だけを返し、実際の
    出題時のみ静的JSON本体を取得する。言語選択UIの描画に数十KBの
    問題文を毎回転送しないための二段構え。APIが無い配信形態
@@ -544,7 +544,7 @@ disclosure領域に明記する。
    表示のみになる(別言語の声で誤読される場合もある)。
 6. **表示文はコピー可能なDOMで出す**: `readonly`の`<textarea>`+
    `user-select: text`。保存手段は「コピー」「Blob+`<a download>`で
-   .txt保存」「既存の永続化API(`POST /v1/db/history`)へ保存」の3系統を
+   .txt保存」「既存の永続化API(`POST /openenglish.v1.Db/HistoryGet`)へ保存」の3系統を
    用意し、**DB保存のために新しいテーブル・新しいエンドポイントを
    作らない**(既存の会話履歴テーブルへ専用の`role`で入れるだけで足りる)。
 
@@ -560,11 +560,11 @@ Goethe-Zertifikat・HSK・TOPIK等)の過去問ではなく、それらの試験
 要件を満たすためのパターン。ブラウザだけ・サーバーだけでは不十分な理由がある。
 
 1. **書き込みは常に両方へ**: `localStorage`(一次)と、サーバー側の既存の設定
-   永続化API(このリポジトリでは`POST /v1/db/settings`、SQLite)の両方へ同じ
+   永続化API(このリポジトリでは`POST /openenglish.v1.Db/SettingsGet`、SQLite)の両方へ同じ
    キーで書く。サーバーが落ちていても`fetch`の失敗を握りつぶすだけで、
    ブラウザ側の保存は成立する。
 2. **読み込みは「localStorageに無ければDBから復元」**: 起動時に一度だけ
-   `GET /v1/db/settings`を読み、`localStorage`に無いキーだけ埋め戻す。
+   `POST /openenglish.v1.Db/SettingsGet`を読み、`localStorage`に無いキーだけ埋め戻す。
    **この復元は、設定を読む他の初期化処理より必ず前に実行すること**——
    順序を誤ると「DBには残っているのに画面には反映されない」という、
    実機でしか気づけないバグになる(このリポジトリで実際に発生させ、
@@ -748,7 +748,7 @@ LLMに生成させず人手で書いた固定文を返すパターン。`app.js`
   「対応済み」に見せない)。
 - **年齢による選択制限を作らないこと**: 学年ボタンは全学年を常に選択可能に
   する(高校生・社会人が保育園児レベルからやり直せる、というユーザー要件)。
-- **学習履歴の保存**: 既存の`POST /v1/db/history`(ローカルSQLite+
+- **学習履歴の保存**: 既存の`POST /openenglish.v1.Db/HistoryGet`(ローカルSQLite+
   `OPEN_ENGLISH_DATABASE_URL`があればPostgreSQL互換DBへミラー)へ
   `role`を分けて投げるだけ。新しいテーブル・新しいAPIを作らない。
 
@@ -779,7 +779,7 @@ LLMに生成させず人手で書いた固定文を返すパターン。`app.js`
 - **自動採点になじまない出題形式は、その旨を明記して扱わない**:
   小論文・面接・実技は4択の知識問題として近似しているだけであり、
   「小論文添削・面接練習ができる」とは書かない(正直な開示に明記する)。
-- **採点結果の保存**: 家庭教師コースと同じく`POST /v1/db/history`へ
+- **採点結果の保存**: 家庭教師コースと同じく`POST /openenglish.v1.Db/HistoryGet`へ
   `role`だけ変えて(`"virtual-school-result"`)投げる。新しいテーブル・
   新しいAPIは作らない。
 - **著作権**: 実際の入試問題・市販問題集・教科書は転載しない。
@@ -1012,7 +1012,7 @@ only lists the reusable takeaways.
   無音除去が幻覚対策として最も効く(P2-γ 必須)。
 - **ハードウェアアクセラレータは実行段カスケードで / Cascade the
   execution tier**: `getWhisperPipeline()` が WebGPU → WebNN(npu/gpu/cpu)
-  → WASM(スレッド数は `/v1/cpu-runtime` = open-cpu の検出ヒント)を
+  → WASM(スレッド数は `/openenglish.v1.CpuRuntime/CpuRuntime` = open-cpu の検出ヒント)を
   順に試す。WebNN は 2026 時点でまだフラグ裏なので「効くのは限定的」と
   正直に注記すること。
 - **モデル/ランタイムのホスト / Hosting the model + runtime**: リポジトリ
@@ -1139,7 +1139,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 **日本語**: 本日追加した機能: (1) 管理者専用のAI優先順位番号付け(#1-3)、(2) 四つの9パズルの自動採点(演算子・括弧の全角半角/日本語表記ゆれを正規化、括弧忘れのみ半分正解、÷9丸ごと忘れは不正解)、
 (3) 自分のAPIキー設定時はWEB版共有AIと併用しない(自分の鍵を優先・排他利用)、(4) タイ語・ベトナム語・フィリピン語・ミャンマー語・クルド語・トルコ語・ロマンシュ語を学習言語に追加(文化・敬語の豆知識つき)、
 (5) 学びたい言語・応答言語・レベルの保存(PC/スマホ/タブレット共通)、(6) 話題ガイドにGoogle画像検索リンク追加、(7) 文字入力/音声入力/翻訳/AI自身の知識に自信が無い時のGoogle検索自動裏取り(3つの理由を利用者へ開示)、
-(8) 3〜4ヶ国語同時ハイブリッド表示(hybrid3/hybrid4)、(9) 「今日のニュースは?」が公開WEB版で常に失敗していた不具合修正(`/v1/public/news/for?country=...`、質問言語で国を判定)、
+(8) 3〜4ヶ国語同時ハイブリッド表示(hybrid3/hybrid4)、(9) 「今日のニュースは?」が公開WEB版で常に失敗していた不具合修正(`/openenglish.v1.News/For?country=...`、質問言語で国を判定)、
 (10) ニュースダイジェストの国別DATABASE化(TTL3時間、`data/news_by_country.json`)+日付記録(検索日時・記事取得日時、`retrieved_at_unix`)、(11) 8日以上前のニュースを生きているDBから追い出しMarkdownへアーカイブする仕組み
 (`prune_and_archive_stale_news`、GitHubへの実際のpushは今回未実装——常時稼働プロセスへ書き込み資格情報を持たせないための意図的な判断、実際のpushは今後Claude Code経由で手動実施)、
 (12) 「もっと簡単に」「難しい」発言でレベルを自動的に1段下げる機能+ネイティブ表現アドバイスの指示、(13) 「最新の情報が欲しい」ニュアンス検出でGoogle検索・GitHub調査を自動的に有効化。
@@ -1156,7 +1156,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 **简体中文**: 今天新增的功能:(1)管理员专用的AI优先级编号(#1-3),(2)"四个9"数学谜题自动评分(标准化全角/半角运算符及日语表达,只忘记括号记为半对,完全忘记÷9记为错误),
 (3)设置自己的API密钥后不再与网页版共享AI并用(优先且排他使用自己的密钥),(4)新增泰语、越南语、菲律宾语、缅甸语、库尔德语、土耳其语、罗曼什语作为学习语言(附文化及敬语小知识),
 (5)学习语言/回复语言/等级设置可跨PC、手机、平板保存,(6)话题指南中新增Google图片搜索链接,(7)当文字输入/语音输入/翻译/AI自身知识置信度低时自动通过Google搜索核实(并向用户说明三种触发原因),
-(8)支持3~4种语言同时混合显示(hybrid3/hybrid4),(9)修复了公开网页版"今天的新闻"功能一直失败的问题(新增`/v1/public/news/for?country=...`,根据提问语言判断国家),
+(8)支持3~4种语言同时混合显示(hybrid3/hybrid4),(9)修复了公开网页版"今天的新闻"功能一直失败的问题(新增`/openenglish.v1.News/For?country=...`,根据提问语言判断国家),
 (10)按国家分类的新闻摘要数据库(TTL 3小时,`data/news_by_country.json`)并记录检索/发布日期(`retrieved_at_unix`),(11)将8天以上的旧新闻从活跃数据库中清除并归档为Markdown文件
 (实际推送到GitHub的部分本次尚未实现——刻意不给常驻运行的服务器进程赋予GitHub写入权限,实际推送将来通过Claude Code手动完成),
 (12)当用户说"简单一点"或"太难了"时自动降低一级难度,并附带母语者表达建议,(13)检测到"想要最新信息"的语气时自动启用Google搜索与GitHub调查。
@@ -1165,7 +1165,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 **繁體中文**: 今天新增的功能:(1)管理員專用的AI優先順序編號(#1-3),(2)「四個9」數學謎題自動評分(標準化全形/半形運算子及日語表達,只忘記括號記為半對,完全忘記÷9記為錯誤),
 (3)設定自己的API金鑰後不再與網頁版共用AI並用(優先且排他使用自己的金鑰),(4)新增泰語、越南語、菲律賓語、緬甸語、庫德語、土耳其語、羅曼什語作為學習語言(附文化及敬語小知識),
 (5)學習語言/回覆語言/等級設定可跨PC、手機、平板保存,(6)話題指南中新增Google圖片搜尋連結,(7)當文字輸入/語音輸入/翻譯/AI自身知識信心度低時自動透過Google搜尋核實(並向使用者說明三種觸發原因),
-(8)支援3~4種語言同時混合顯示(hybrid3/hybrid4),(9)修復了公開網頁版「今天的新聞」功能一直失敗的問題(新增`/v1/public/news/for?country=...`,依提問語言判斷國家),
+(8)支援3~4種語言同時混合顯示(hybrid3/hybrid4),(9)修復了公開網頁版「今天的新聞」功能一直失敗的問題(新增`/openenglish.v1.News/For?country=...`,依提問語言判斷國家),
 (10)依國家分類的新聞摘要資料庫(TTL 3小時,`data/news_by_country.json`)並記錄檢索/發布日期(`retrieved_at_unix`),(11)將8天以上的舊新聞從活躍資料庫中清除並歸檔為Markdown檔案
 (實際推送到GitHub的部分本次尚未實作——刻意不給常駐運行的伺服器行程賦予GitHub寫入權限,實際推送將來透過Claude Code手動完成),
 (12)當使用者說「簡單一點」或「太難了」時自動降低一級難度,並附帶母語者表達建議,(13)偵測到「想要最新資訊」的語氣時自動啟用Google搜尋與GitHub調查。
@@ -1174,7 +1174,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 **Français**: Fonctionnalités ajoutées aujourd'hui : (1) numérotation de priorité IA réservée aux admins (#1-3), (2) notation automatique du puzzle des « quatre 9 » (normalisation des opérateurs pleine/demi-chasse et des expressions japonaises ; oubli des parenthèses seul = à moitié correct, oubli complet de ÷9 = incorrect),
 (3) l'utilisation de sa propre clé API exclut désormais l'IA partagée du site web (usage exclusif de sa propre clé), (4) ajout du thaï, vietnamien, philippin, birman, kurde, turc et romanche comme langues d'apprentissage (avec notes culturelles),
 (5) persistance des préférences (langue cible, langue de réponse, niveau) sur PC/mobile/tablette, (6) liens de recherche d'images Google dans les guides thématiques, (7) recherche Google automatique lorsque la confiance dans la saisie texte/vocale/traduction/connaissance de l'IA est faible (raison affichée à l'utilisateur),
-(8) mode hybride 3/4 langues simultané (hybrid3/hybrid4), (9) correction du bug où « les nouvelles du jour » échouaient toujours sur le site public (nouvelle route `/v1/public/news/for?country=...`, pays déterminé par la langue de la question),
+(8) mode hybride 3/4 langues simultané (hybrid3/hybrid4), (9) correction du bug où « les nouvelles du jour » échouaient toujours sur le site public (nouvelle route `/openenglish.v1.News/For?country=...`, pays déterminé par la langue de la question),
 (10) base de données d'actualités par pays (TTL 3h, `data/news_by_country.json`) avec horodatage de récupération (`retrieved_at_unix`), (11) archivage des actualités de plus de 8 jours vers un fichier Markdown local
 (le push GitHub réel n'est pas encore automatisé — décision délibérée de ne pas donner d'identifiants d'écriture GitHub au processus serveur permanent ; le push sera fait manuellement via Claude Code), (12) rétrogradation automatique du niveau sur demande explicite (« plus simple », « trop difficile ») avec conseils de formulation naturelle,
 (13) activation automatique de la recherche Google/GitHub sur détection d'une intention « informations les plus récentes ».
@@ -1183,7 +1183,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 **Deutsch**: Heute hinzugefügte Funktionen: (1) nur für Admins sichtbare KI-Prioritätsnummerierung (#1-3), (2) automatische Bewertung des „Vier-Neunen"-Rätsels (Normalisierung von Voll-/Halbbreiten-Operatoren und japanischen Ausdrücken; nur vergessene Klammern = halb richtig, komplett vergessenes ÷9 = falsch),
 (3) eigener API-Schlüssel schließt die gemeinsame Web-KI nun aus (exklusive Nutzung des eigenen Schlüssels), (4) Thailändisch, Vietnamesisch, Filipino, Birmanisch, Kurdisch, Türkisch und Rätoromanisch als Lernsprachen hinzugefügt (mit kulturellen Hinweisen),
 (5) Speicherung von Zielsprache/Antwortsprache/Niveau geräteübergreifend (PC/Handy/Tablet), (6) Google-Bildersuche-Links in Themenführern, (7) automatische Google-Suchabsicherung bei geringer Konfidenz bei Text-/Spracheingabe/Übersetzung/KI-Wissen (Grund wird dem Nutzer angezeigt),
-(8) gleichzeitiger 3/4-Sprachen-Hybridmodus (hybrid3/hybrid4), (9) Fehlerbehebung: „heutige Nachrichten" funktionierten auf der öffentlichen Website nie (neue Route `/v1/public/news/for?country=...`, Land wird anhand der Fragesprache bestimmt),
+(8) gleichzeitiger 3/4-Sprachen-Hybridmodus (hybrid3/hybrid4), (9) Fehlerbehebung: „heutige Nachrichten" funktionierten auf der öffentlichen Website nie (neue Route `/openenglish.v1.News/For?country=...`, Land wird anhand der Fragesprache bestimmt),
 (10) länderspezifische Nachrichten-Datenbank (TTL 3h, `data/news_by_country.json`) mit Abrufzeitstempel (`retrieved_at_unix`), (11) Archivierung von Nachrichten älter als 8 Tage aus der Live-DB in eine lokale Markdown-Datei
 (tatsächlicher GitHub-Push noch nicht automatisiert — bewusste Entscheidung, dem dauerhaft laufenden Serverprozess keine GitHub-Schreibrechte zu geben; der eigentliche Push erfolgt später manuell über Claude Code), (12) automatische Niveau-Herabstufung bei „einfacher bitte"/„zu schwer" mit Hinweisen zu natürlicher Ausdrucksweise,
 (13) automatische Aktivierung der Google-/GitHub-Suche bei erkannter „aktuellste Informationen"-Absicht.
@@ -1192,7 +1192,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 **ภาษาไทย**: ฟีเจอร์ที่เพิ่มวันนี้: (1) การจัดลำดับความสำคัญ AI แบบใส่หมายเลข (#1-3) สำหรับผู้ดูแลระบบเท่านั้น (2) การให้คะแนนอัตโนมัติสำหรับปริศนา "เลข 9 สี่ตัว" (ปรับเครื่องหมายเต็ม/ครึ่งความกว้างและคำภาษาญี่ปุ่นให้เท่ากัน ลืมเฉพาะวงเล็บ = ถูกครึ่งหนึ่ง ลืม ÷9 ทั้งหมด = ผิด)
 (3) เมื่อตั้งค่าคีย์ API ของตนเองแล้ว จะไม่ใช้ AI ที่แชร์บนเว็บร่วมด้วย (ใช้คีย์ของตนเองแบบเอกสิทธิ์) (4) เพิ่มภาษาไทย เวียดนาม ฟิลิปปินส์ พม่า เคิร์ด ตุรกี และโรมันช์ เป็นภาษาที่เรียนได้ (พร้อมข้อมูลวัฒนธรรม)
 (5) บันทึกการตั้งค่าภาษาที่เรียน/ภาษาตอบกลับ/ระดับ ข้ามอุปกรณ์ PC/มือถือ/แท็บเล็ต (6) ลิงก์ค้นหารูปภาพ Google ในคู่มือหัวข้อ (7) เปิดใช้การค้นหา Google อัตโนมัติเมื่อความมั่นใจในการพิมพ์/เสียง/การแปล/ความรู้ของ AI ต่ำ (แสดงเหตุผลให้ผู้ใช้เห็น)
-(8) โหมดผสมหลายภาษาพร้อมกัน 3-4 ภาษา (hybrid3/hybrid4) (9) แก้ไขบั๊กที่ฟีเจอร์ "ข่าววันนี้" ใช้งานไม่ได้เลยบนเว็บสาธารณะ (เพิ่มเส้นทาง `/v1/public/news/for?country=...` เลือกประเทศตามภาษาของคำถาม)
+(8) โหมดผสมหลายภาษาพร้อมกัน 3-4 ภาษา (hybrid3/hybrid4) (9) แก้ไขบั๊กที่ฟีเจอร์ "ข่าววันนี้" ใช้งานไม่ได้เลยบนเว็บสาธารณะ (เพิ่มเส้นทาง `/openenglish.v1.News/For?country=...` เลือกประเทศตามภาษาของคำถาม)
 (10) ฐานข้อมูลข่าวสรุปรายประเทศ (TTL 3 ชั่วโมง `data/news_by_country.json`) พร้อมบันทึกเวลาดึงข้อมูล (`retrieved_at_unix`) (11) เก็บถาวรข่าวที่เก่ากว่า 8 วันออกจากฐานข้อมูลไปเป็นไฟล์ Markdown
 (ยังไม่ได้ทำการ push ไปยัง GitHub จริง — เป็นการตัดสินใจโดยเจตนาที่จะไม่ให้สิทธิ์เขียน GitHub แก่โพรเซสเซิร์ฟเวอร์ที่ทำงานตลอดเวลา การ push จริงจะทำผ่าน Claude Code ในภายหลัง) (12) ลดระดับความยากอัตโนมัติเมื่อผู้ใช้พูดว่า "ง่ายกว่านี้" หรือ "ยากเกินไป" พร้อมคำแนะนำสำนวนแบบเจ้าของภาษา
 (13) เปิดใช้การค้นหา Google/GitHub อัตโนมัติเมื่อตรวจพบความต้องการ "ข้อมูลล่าสุด"
@@ -1233,7 +1233,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 3. 秘密を別経路で復元(Gitに無い): `/etc/open-english.env`(SMTP・管理者メール等)。
 4. `open-english.service`(`OPEN_ENGLISH_SERVER_BIND=127.0.0.1:8104`、`EnvironmentFile=/etc/open-english.env`)と`open-english-demo.service`を設置して起動。nginxの`easy-web.tokyo`設定も再現。
 5. aruaru-llm側(別リポジトリ`aruaru-llm`のPORTING.md「お引越し」)を先に起動しておくと、知識・先生キャラ応対が即使える。
-6. 確認: `curl https://easy-web.tokyo/open-english/v1/public/knowledge/export`で件数、ブラウザで女性キャラ=メイド/男性キャラ=執事の応対。
+6. 確認: `curl https://easy-web.tokyo/open-english/openenglish.v1.Knowledge/Export`で件数、ブラウザで女性キャラ=メイド/男性キャラ=執事の応対。
 確認済み(2026-10-06): 公開サイトの切替・知識エクスポート・v0.8.14のAndroid/PC/Linux/macOSリリース。Android実機と、VPS丸ごとの再構成の通し試験は未実施。
 
 **English**
@@ -1242,7 +1242,7 @@ When porting to another language, keep this three-stage shape (normalize → str
 3. Restore secrets out of band (not in Git): `/etc/open-english.env` (SMTP, admin e-mails, …).
 4. Install `open-english.service` (`OPEN_ENGLISH_SERVER_BIND=127.0.0.1:8104`, `EnvironmentFile=/etc/open-english.env`) and `open-english-demo.service`; recreate the nginx `easy-web.tokyo` site.
 5. Start aruaru-llm first (see "Migration" in the aruaru-llm PORTING.md) so knowledge and the maid/butler persona are available immediately.
-6. Verify: `curl https://easy-web.tokyo/open-english/v1/public/knowledge/export` returns items; in the browser, the female character answers as the maid and the male one as the butler.
+6. Verify: `curl https://easy-web.tokyo/open-english/openenglish.v1.Knowledge/Export` returns items; in the browser, the female character answers as the maid and the male one as the butler.
 Verified (2026-10-06): public-site persona switching, knowledge export, v0.8.14 releases (Android/Windows/Linux/macOS). **Not** verified: a real Android device, and a from-scratch VPS rebuild.
 
 ## JSON処理の使用方針: `parse_secure_sonic`(速い型+安全)と`sonic-rs`は使える所では全て使う(2026-10-14、ユーザー指示)
@@ -1399,43 +1399,31 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 - Интерфейсы, форма которых задана внешним стандартом (ACME, обратные вызовы OAuth, вебхуки сторонних сервисов, проверки работоспособности, статические файлы, OTLP), остаются обычным HTTP.
 - **Если есть сомнения — выбирайте Connect.**
 
+## aruaru-llm Connect 化の引き継ぎ(2026-11-05)
+aruaru-llm の REST 全廃に合わせ、呼び出しを `POST /aruaru_llm.v1.Llm/<Method>` へ変更済み(詳細は CLAUDE.md 末尾)。VPS 反映は aruaru-llm の main マージと同時に行うこと(片方だけだと全 AI 機能が 404)。
 
-## 2026-11-19 世界情勢Q&A: 類義語で探し直す機能と、回答できなかった質問の学習(別アカウントでの再開用) / News Q&A: similar-word search and opt-in learning
+## API: Connect への移行(2026-11-05)/ API migration to Connect
+- 日本語: サーバー自身のAPIは全て `POST /openenglish.v1.<Service>/<Method>`(JSON)。旧 `/v1/...` のRESTルートは削除済み。元GETの引数はクエリのまま受ける(本文は `{}`)。`web/app.js` の `fetch` ラッパーが、method/body 省略時に POST と `{}` を補う。例外として残す: `/healthz`・`/health`、静的ファイル、`/v1/line/webhook`・`/v1/line/audio`・`/v1/line/info`(LINE連携の外部規格)。
+- English: All of this server's own APIs are `POST /openenglish.v1.<Service>/<Method>` (JSON); the old `/v1/...` REST routes are gone. Former GET arguments stay in the query string (body `{}`); the `fetch` wrapper in `web/app.js` supplies POST and `{}` when method/body are omitted. Remaining exceptions: `/healthz`, `/health`, static files, `/v1/line/webhook`, `/v1/line/audio`, `/v1/line/info` (LINE integration).
+- 本番(VPS)デプロイ時は、open-web-server の `domains.toml` に `/openenglish.v1.` を8104へ流す項目が必要(既存の `/v1` 項目と同様)。/ On the VPS, add a `/openenglish.v1.` proxy entry to `domains.toml` (like the existing `/v1` one).
 
+## 再開用メッセージ / Resume message
+**日本語**: `aruaru-llm/PORTING.md`末尾の「再開用メッセージ」を正本とする(再開するリポジトリは`aruaru-llm`と、こちらの`open-english`=`maid-cafe-english`)。こちらでの作業は、`web/app.js`を直したら`mobile/android/app/src/main/assets/webroot/`へ同期し、`web/version.json`と同`webroot/version.json`を上げて`v*`タグをpush。
+**English**: The "Resume message" at the end of `aruaru-llm/PORTING.md` is canonical (repos: `aruaru-llm` and this `open-english` = `maid-cafe-english`). Here: after editing `web/app.js`, sync it into `mobile/android/app/src/main/assets/webroot/`, bump both `version.json` files, and push a `v*` tag.
+- **2026-11-15 追記(別アカウントで再開する人へ)**: **完了**: ①v0.8.17は、CIが3つのAndroid用.so(open-english-server/aruaru-llm/open-cpu)まで毎回ビルドする初の本番リリースとして通し確認済み(CI全ジョブ成功・APKの中身・VPS自動更新・実機moto g53y)。②Windowsインストーラー(v0.8.18)をこのPCで実機試験(サイレントのインストール・起動・アンインストール)。**不具合を発見・修正**: インストーラーが取るaruaru-llmの最新リリース(v0.2.4、2026-09-08)が旧REST版でConnectが404・チャット502 → `aruaru-llm`のリリースCIにglslc導入(Linux=`apt install glslc`、Windows=`choco install vulkan-sdk`+PATH)して**v0.2.5を公開**、取得し直してConnect `Runtime`=200・旧`/v1/runtime`=404・アプリ内サーバー経由200を確認。**未了**: Linux/macOSインストーラーの実機試験、Android実機で新しいaruaru-llm同梱の再確認は不要(v0.8.17で済み)、`aruaru-llm`のv0.2.5に元から未コミットだった`Cargo.lock`の変更が混入(CIは成功、中身は未精査)。**再開**: `aon-co-jp/open-english`(新名`maid-cafe-english`、`F:\open-english`)と`aon-co-jp/aruaru-llm`(`F:ruaru-llm`)。リリースは`web/version.json`と`mobile/android/app/src/main/assets/webroot/version.json`を上げ、`master`をpushしてから`v*`タグをpush(タグ後に`master`がボットで進むと拒否される→タグを消し、rebaseして付け直す)。**落とし穴**: ローカルの`jniLibs/*.so`と`server/Cargo.lock`の変更はビルドの残骸(コミットしない、`git stash`に退避済み)。Windowsの`Start-Process -Wait`は起動したアプリの終了まで待つので使わない。
+- **2026-11-15 addendum (for whoever resumes on another account)**: **Done**: (1) v0.8.17 was verified end to end as the first production release where CI builds the three Android .so files (open-english-server / aruaru-llm / open-cpu) every time (all CI jobs, APK contents, VPS auto-update, real moto g53y). (2) The Windows installer (v0.8.18) was tested on this PC (silent install, launch, uninstall). **A bug was found and fixed**: the installer fetches the latest `aruaru-llm` release (v0.2.4, 2026-09-08), which was the old REST build (Connect 404, chat 502) -> glslc was added to `aruaru-llm`'s release CI (Linux `apt install glslc`; Windows `choco install vulkan-sdk` + PATH) and **v0.2.5 was published**; after re-fetching, Connect `Runtime` = 200, old `/v1/runtime` = 404, and the in-app server relay = 200. **Open**: real-machine tests of the Linux/macOS installers; v0.2.5 of `aruaru-llm` also picked up a previously uncommitted `Cargo.lock` change (CI passed, contents not reviewed). **Resume**: `aon-co-jp/open-english` (now `maid-cafe-english`, `F:\open-english`) and `aon-co-jp/aruaru-llm` (`F:ruaru-llm`). To release: bump `web/version.json` and `mobile/android/app/src/main/assets/webroot/version.json`, push `master`, then push a `v*` tag (if the archive bot advances `master` after tagging, the push is rejected: delete the tag, rebase, re-tag). **Pitfalls**: local `jniLibs/*.so` and `server/Cargo.lock` changes are build leftovers (do not commit; stashed). PowerShell `Start-Process -Wait` waits for the launched app to exit; do not use it for the installer.
+
+## 再開用メッセージ(2026-11-18、別アカウント用)/ Resume message (another account)
+**日本語**: 次のメッセージをそのまま貼り付けてください。
+> `maid-cafe-english`(旧 `open-english`、タグは旧側へ push)の続きです。クローンは `F:\open-english-connect`。aruaru-llm 呼び出しの Connect 化・自動再読み込み・VPS 自動更新・Android ネイティブ .so の CI ビルドは完了、v0.8.16 公開・実機確認済みです。未了は、(1) v0.8.17 など次のタグで全 CI ビルドの通し確認、(2) `/open-english/demo/` の静的404、(3) `server/Cargo.lock` の環境依存、(4) 実機のデバッグ署名アプリの削除、(5) aruaru-IME 経路の通し確認です。まず `CLAUDE.md` 末尾の HANDOFF 2026-11-18 を読み、調査・確認・開発・TEST・DEBUG をして完成させてください。
+
+**English**: Paste the following as is.
+> Continuing `maid-cafe-english` (formerly `open-english`; tags are pushed to the old repo). Clone: `F:\open-english-connect`. Connect migration of aruaru-llm callers, auto-reload, VPS auto-update and the CI-built Android native .so are done; v0.8.16 is released and verified on a device. Open: (1) an end-to-end release from a fresh tag such as v0.8.17 built fully by CI, (2) the static 404 at `/open-english/demo/`, (3) environment-dependent `server/Cargo.lock`, (4) uninstall the debug-signed app on the phone, (5) end-to-end check of the aruaru-IME path. Start by reading HANDOFF 2026-11-18 at the end of `CLAUDE.md`, then investigate, verify, develop, test and debug to completion.
+
+
+## 再開用メッセージ 2026-11-19 / Resume message
 ### 日本語
-**何ができるようになったか**
-- 質問にぴったり合う保存記事が無いとき、**類義語**(例: 戦争→紛争/conflict、休戦→ceasefire)で保存記事を探し直します。見つかったときは、回答の先頭に「類義語で探しました」と日本語と英語で書きます。それでも見つからなければ、これまでどおり Google・YouTube・aruaru-search の案内を出します。
-- 次の質問では類義語を足しません: **数字を含む質問**(日付・番号は、言い換えると別の意味になるため)。足す類義語は**最大8語**です(多すぎると関係のない記事が混ざるため)。
-- **回答できなかった質問の学習**(既定はOFF): インストールした本人のPC(`localhost`、プロキシを通らない接続)から、本人が `learn=1` を付けて質問したときだけ働きます。保存するのは質問から取り出した**言葉と回数だけ**で、質問文そのものは保存しません。VPSなど公開サーバーでは働きません(実測で、テーブルが作られないことを確認)。多く出た言葉は `top_unanswered` で見られますが、**辞書には自動で入れません**(人が確認して `SYNONYMS` に足します)。
-- 変更は `server/src/news_qa.rs`(`similar_terms`・`record_unanswered`・`top_unanswered`)と `server/src/main.rs`(`news_ask`)です。コミット `bd7e026`・`9b421f2`・`6502c12`・`769c085`(`maid-cafe-english` の `master`)。テストは news_qa の16件が成功。
+`F:\open-english` と `F:\runo`、`F:\aruaru-llm` の続きをやります。まず `CLAUDE.md` の最後にある「HANDOFF 2026-11-19」を読んでください。データベース・rsync・旧データ取り込みは、もう作ってあります。残りは3つです。(1)rsync自動インストールを実際のPCで試す、(2)作業中の別の変更を整理する、(3)origin との差(約33コミット)を取り込む。返事は日本語で。push する前に必ず確認してください。
 
-**本番(VPS)の状態**
-- 本番は `open-english` リポジトリのクローン(`/root/easy-web.tokyo/open-english`)から動いています。上のコミットは `maid-cafe-english` にあるため、同じ内容をパッチとして当て、ビルドして差し替えました(`open-english.service` と `open-english-demo.service` は active、`maid-cafe.tokyo` は200、エラーログ0)。
-- そのため、VPSのクローンには**未コミットの変更が残っています**。`git pull` する前に必ず確認してください。戻すときは `/root/open-english-server.before-similar-20261119` か `.before-learn-20261119` を使います。
-
-**まだ終わっていないこと**
-1. 学習をONにする**画面(ボタン)**がまだ無い。今は `learn=1` を付けた呼び出しだけで動く。
-2. localhost で実際に言葉が記録される場面の通し確認(判定は既存の `is_local_request` を使用)。
-3. 類義語表は15組だけ。実際に多く出た言葉を見て増やす。
-4. `open-english` リポジトリ側への取り込み(今は VPS のパッチのみ)。
-
-**再開用メッセージ(そのまま貼り付け)**: 「`F:\runo\repository\_work\mce`(maid-cafe-english)の `PORTING.md` 末尾『2026-11-19 世界情勢Q&A』を読んでから再開します。未了は、学習をONにする画面、localhost での記録の通し確認、類義語表の拡張、open-english 側への取り込みです。決まり: 新しいRESTは作らない、秘密は表示しない、質問文は保存しない、実機で確認してから完了と報告する。」
-
-### English (simple words, easy to read)
-**What is new**
-- When no saved news article matches a question, the app now tries **similar words** (for example, "war" and "conflict", or "truce" and "ceasefire"). If this finds articles, the answer starts with a short note in Japanese and English: "I searched with similar words." If nothing is found, the app still shows the Google, YouTube and aruaru-search links as before.
-- It does **not** add similar words when the question has **a number** in it (dates and numbers can change meaning if we swap words). It adds **at most 8** words, because too many words bring in unrelated news.
-- **Learning from unanswered questions** is **off by default**. It works only when the question comes from the owner's own PC (`localhost`, not through a proxy) **and** the owner adds `learn=1`. It saves only the **words and how many times they appeared**. It never saves the question itself. It does not work on public servers such as the VPS (we checked that the table is not even created). Common words can be listed with `top_unanswered`, but they are **never added to the dictionary automatically**. A person checks them and adds them to `SYNONYMS`.
-- Changed files: `server/src/news_qa.rs` (`similar_terms`, `record_unanswered`, `top_unanswered`) and `server/src/main.rs` (`news_ask`). Commits: `bd7e026`, `9b421f2`, `6502c12`, `769c085` (branch `master` of `maid-cafe-english`). All 16 news_qa tests pass.
-
-**Production (VPS)**
-- Production runs from a clone of the `open-english` repository (`/root/easy-web.tokyo/open-english`). Our commits live in `maid-cafe-english`, so we applied the same change as a patch, built it and swapped the program (`open-english.service` and `open-english-demo.service` are active, `maid-cafe.tokyo` returns 200, no errors in the log).
-- Because of this, the VPS clone has **changes that are not committed**. Please check before you run `git pull`. To go back, use `/root/open-english-server.before-similar-20261119` or `.before-learn-20261119`.
-
-**Not finished yet**
-1. There is **no button or screen** yet to turn learning on. Today it works only with a call that has `learn=1`.
-2. We have not yet watched words being saved on a real `localhost` run (the check itself uses the existing `is_local_request`).
-3. The similar-word table has only 15 groups. We should grow it by looking at the words people really use.
-4. The change is not yet in the `open-english` repository (it is only a patch on the VPS).
-
-**Message to paste when you continue**: "Read 'PORTING.md', the last section '2026-11-19 世界情勢Q&A', in `F:\runo\repository\_work\mce` (maid-cafe-english) before you start. Open items: a screen to turn learning on, a real localhost check of saving words, a bigger similar-word table, and moving the change into open-english. Rules: no new REST, never print secrets, never save the question text, and check on a real system before saying it is done."
+### English (simple and friendly)
+Let's continue with `F:\open-english`, `F:\runo` and `F:\aruaru-llm`. First, read "HANDOFF 2026-11-19" at the end of `CLAUDE.md`. The database, rsync and old-data import are already built. Three things are left: (1) try the rsync auto-install on a real PC, (2) tidy the other unfinished changes, (3) catch up with origin (about 33 commits behind). Please ask before you push.

@@ -1,0 +1,8 @@
+[Unit]
+Description=open-english VPS auto-update (latest GitHub Release -> swap + restart + rollback)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/root/easy-web.tokyo/open-english/deploy/vps/open-english-autoupdate.sh
+TimeoutStartSec=900

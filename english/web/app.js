@@ -1,3 +1,7 @@
+function isOwnOriginHost() {
+  const h = location.hostname;
+  return h === "easy-web.tokyo" || h.endsWith(".easy-web.tokyo") || h === "maid-cafe.tokyo" || h.endsWith(".maid-cafe.tokyo");
+}
 // open-english フロントエンド(Phase 0)。
 //
 // 正直な開示: `aruaru-llm`の`/v1/generate`は対話特化のファインチューニング
@@ -115,6 +119,19 @@
 // RS-Sync/open-giteaで過去に踏んだのと同じ既知のパターン)。
 // `location.pathname`から実行時に判定した接頭辞を、`/v1/`宛の絶対パス
 // fetchにのみ機械的に前置する(相対パス・他オリジンへのfetchは無変更)。
+// 2026-11-12 自動修復の安全装置: 再読み込みで会話(質問と答え)を消さないための判定。
+// 利用者の発言が画面にあり、直近3分以内に操作があったときは「再読み込みしてはいけない」と答える。
+window.__lastUserActionAt = Date.now();
+["pointerdown", "keydown", "input"].forEach((ev) => window.addEventListener(ev, () => { window.__lastUserActionAt = Date.now(); }, true));
+window.__safeToReload = function safeToReload() {
+  try {
+    const lg = document.getElementById("log");
+    const hasConversation = !!(lg && lg.querySelector(".msg.user"));
+    return !hasConversation || Date.now() - window.__lastUserActionAt > 180000;
+  } catch (e) {
+    return true;
+  }
+};
 (function patchFetchForPathPrefix() {
   const path = location.pathname;
   let prefix = "";
@@ -144,9 +161,31 @@
   window.fetch = (input, init) => {
     if (typeof input === "string") {
       const url = prefix && input.startsWith("/openenglish.v1.") ? prefix + input : input;
-      return originalFetch(url, withConnectDefaults(url, init));
+      return originalFetch(url, withConnectDefaults(url, init)).then(staleCheck(url));
     }
     return originalFetch(input, init);
+  };
+  // 古い画面の自動再読み込み(2026-11-05): 旧パス(`/v1/public/...`等)の画面がブラウザに残っていると、
+  // 切り替え後のサーバーが404を返す。Connectの経路(`/openenglish.v1.*`・`/aruaru_llm.v1.Llm/*`)が404のときは
+  // キャッシュを避けて1回だけ自動で再読み込みする(10分以内の再発は無限ループ防止のため何もしない)。
+  // 併せて`version.json`の`buildId`ポーリング(`auto-update.js`)でも新しい版へ追従する。
+  const staleCheck = (url) => (res) => {
+    try {
+      // 2026-11-12修正: 自分のサーバーのAPI(/openenglish.v1.*)が404のときだけ「古い画面」とみなす。
+      // aruaru_llm.v1.Llm/* は、共有サイト(maid-cafe.tokyo)では元から提供していない(404が正常)ので対象にしない
+      // (対象にしていたため、質問を送るたびに再読み込みされ、答えが一瞬で消えていた)。
+      // 会話の途中(__safeToReloadが偽)のときも、再読み込みしない。
+      if (res && res.status === 404 && /\/openenglish\.v1\.[A-Za-z]+\//.test(url) && window.__safeToReload()) {
+        const last = Number(sessionStorage.getItem("openEnglish.staleReloadAt") || 0);
+        if (Date.now() - last > 600000) {
+          sessionStorage.setItem("openEnglish.staleReloadAt", String(Date.now()));
+          const u = new URL(location.href);
+          u.searchParams.set("v", String(Date.now()));
+          location.replace(u.toString());
+        }
+      }
+    } catch (e) { /* sessionStorageが使えない環境では何もしない */ }
+    return res;
   };
 })();
 
@@ -882,7 +921,7 @@ function ensureScriptGuaranteedReply(completion) {
 // (2026-09-06拡張、ユーザー指示「右上と右下にCLOSEボタンを作って」への
 // 対応——長いパネルを閉じるのに毎回一番上までスクロールしなくて済む
 // よう、同じ開閉状態を複数のボタンで共有制御できるようにした)。
-function makeCollapsiblePanel(boxId, btnIds, storageKeySuffix, closedLabel, openLabel) {
+function makeCollapsiblePanel(boxId, btnIds, storageKeySuffix, closedLabel, openLabel, defaultCollapsed) {
   const box = document.getElementById(boxId);
   const ids = Array.isArray(btnIds) ? btnIds : [btnIds];
   const btns = ids.map((id) => document.getElementById(id)).filter(Boolean);
@@ -897,9 +936,10 @@ function makeCollapsiblePanel(boxId, btnIds, storageKeySuffix, closedLabel, open
       /* localStorage不可でも開閉自体は機能させる */
     }
   }
-  let collapsed = false;
+  let collapsed = !!defaultCollapsed;
   try {
-    collapsed = localStorage.getItem(storageKey) === "1";
+    const saved = localStorage.getItem(storageKey);
+    if (saved !== null) collapsed = saved === "1";
   } catch (e) {
     /* 既定は開いた状態 */
   }
@@ -910,16 +950,16 @@ function makeCollapsiblePanel(boxId, btnIds, storageKeySuffix, closedLabel, open
 }
 
 makeCollapsiblePanel("disclosure-box", "disclosure-toggle-btn", "disclosure", "✕ CLOSE", "＋ OPEN");
-makeCollapsiblePanel("phone-accel-banner", "phone-accel-banner-toggle", "phoneAccelBanner", "✕ CLOSE", "＋ OPEN");
-makeCollapsiblePanel("world-language-banner", "world-language-banner-toggle", "worldLanguageBanner", "✕ CLOSE", "＋ OPEN");
+makeCollapsiblePanel("phone-accel-banner", "phone-accel-banner-toggle", "phoneAccelBanner", "✕ CLOSE", "＋ OPEN", true);
+makeCollapsiblePanel("world-language-banner", "world-language-banner-toggle", "worldLanguageBanner", "✕ CLOSE", "＋ OPEN", true);
 makeCollapsiblePanel("topbar", "topbar-toggle", "topbar", "✕ CLOSE", "＋ OPEN");
 makeCollapsiblePanel("maintenance-banner-detail", "maintenance-banner-toggle", "maintenanceBannerDetail", "✕ CLOSE", "＋ OPEN");
-makeCollapsiblePanel("download-recommend-banner", "download-recommend-banner-toggle", "downloadRecommendBanner", "✕ CLOSE", "＋ OPEN");
-makeCollapsiblePanel("about-school-banner", "about-school-banner-toggle", "aboutSchoolBanner", "✕ CLOSE", "＋ OPEN");
+makeCollapsiblePanel("download-recommend-banner", "download-recommend-banner-toggle", "downloadRecommendBanner", "✕ CLOSE", "＋ OPEN", true);
+makeCollapsiblePanel("about-school-banner", "about-school-banner-toggle", "aboutSchoolBanner", "✕ CLOSE", "＋ OPEN", true);
 // 上の2つ(説明パネル・PC版の案内)をまとめた外側のパネル。
 makeCollapsiblePanel("info-panels", "info-panels-toggle", "infoPanels", "✕ CLOSE", "＋ OPEN");
 // 2026-10-30 ユーザー指示: 「PC版をここからダウンロード…」の範囲も、✕ CLOSE / ＋ OPEN で開閉できるパネルにする(状態は記憶)。
-makeCollapsiblePanel("launch-pc-version-banner", "launch-pc-version-banner-toggle", "launchPcVersionBanner", "✕ CLOSE", "＋ OPEN");
+makeCollapsiblePanel("launch-pc-version-banner", "launch-pc-version-banner-toggle", "launchPcVersionBanner", "✕ CLOSE", "＋ OPEN", true);
 // 2026-09-07追記(ユーザー指示): 「PC版を起動してご利用下さい」という
 // 案内は、ローカルPC版(この端末でインストール済みのサーバーへ
 // localhost/127.0.0.1で接続している場合)では出さない——PC版利用者
@@ -1058,7 +1098,7 @@ if (/^(127\.0\.0\.1|localhost|\[::1\])$/.test(location.hostname)) {
   document.getElementById("download-recommend-banner")?.classList.add("hidden");
   document.getElementById("download-recommend-banner-toggle")?.classList.add("hidden");
 }
-makeCollapsiblePanel("autorw-status-banner", "autorw-status-banner-toggle", "autorwStatusBanner", "✕ CLOSE", "＋ OPEN");
+makeCollapsiblePanel("autorw-status-banner", "autorw-status-banner-toggle", "autorwStatusBanner", "✕ CLOSE", "＋ OPEN", true);
 makeCollapsiblePanel(
   "aruaru-db-setup-content",
   ["aruaru-db-setup-toggle-top", "aruaru-db-setup-toggle-bottom"],
@@ -1127,6 +1167,7 @@ function autorwIsGithubConfigured() {
 async function autorwRefreshGithubStatus() {
   const el = document.getElementById("autorw-github-status");
   if (!el) return;
+  if (isOwnOriginHost()) return; // 共有WEB版では管理者専用(403になる)ため呼ばない
   const mode = "server"; // 2026-09-01: GitHubトークンはサーバー側管理モードのみに一本化
   if (mode === "server") {
     // ⑤サーバー側管理モード(2026-09-01新設): このモードはブラウザ側の
@@ -1305,6 +1346,7 @@ document.getElementById("autorw-vps-copy-env-btn")?.addEventListener("click", as
 async function autorwRefreshVpsStatus() {
   const el = document.getElementById("autorw-vps-status");
   if (!el) return;
+  if (isOwnOriginHost()) return; // 共有WEB版では管理者専用(403になる)ため呼ばない
   try {
     const res = await fetch("/openenglish.v1.Agent/VpsStatus", { cache: "no-store" });
     const data = await res.json();
@@ -2441,6 +2483,97 @@ async function serverTtsPump() {
 
 probeServerTts();
 
+// 端末の合成能力の判定とアプリ導入のお勧め(2026-11-15)。
+// 方針: 端末にSIMD(WASM SIMD。x86のAVX2/ArmのNEON相当)・4コア以上・4GB以上のメモリ、またはWebGPUがあり、かつ
+// インストール済みアプリ(ローカルサーバー)で動いていれば端末で合成する。足りない端末は、配信元(VPS)の
+// 合成APIへ任せる(`serverTts`が同じ`/openenglish.v1.Tts/Tts`を呼ぶので追加の経路は不要)。どちらも無ければWeb Speech API。
+function deviceTtsCaps() {
+  let simd = false;
+  try {
+    // v128.const を返す最小のWASMモジュール。検証が通ればSIMD対応。
+    simd = WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]));
+  } catch (err) {
+    simd = false;
+  }
+  const cores = navigator.hardwareConcurrency || 1;
+  const memGb = navigator.deviceMemory || 0; // 非対応ブラウザは0(=不明)
+  const webgpu = "gpu" in navigator;
+  const localCapable = (simd && cores >= 4 && (memGb === 0 || memGb >= 4)) || webgpu;
+  const standalone =
+    (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  return { simd, cores, memGb, webgpu, localCapable, standalone };
+}
+
+/** 合成の経路: "local-app"(端末のアプリ) / "vps"(配信元の合成) / "browser"(Web Speech API)。 */
+function deviceTtsRoute() {
+  const caps = deviceTtsCaps();
+  const isLocalOrigin = ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname);
+  if (serverTts.available && isLocalOrigin && caps.localCapable) return "local-app";
+  if (serverTts.available) return "vps";
+  return "browser";
+}
+
+const INSTALL_TIPS = {
+  ja: ["もっと自然な声で使うには、アプリをインストールしてください。", "インストール"],
+  en: ["For a more natural voice, install the app.", "Install"],
+  "zh-CN": ["安装应用，可获得更自然的语音。", "安装"],
+  "zh-TW": ["安裝應用程式，可獲得更自然的語音。", "安裝"],
+  ko: ["더 자연스러운 목소리를 위해 앱을 설치하세요.", "설치"],
+  es: ["Instala la app para una voz más natural.", "Instalar"],
+  fr: ["Installez l'application pour une voix plus naturelle.", "Installer"],
+  de: ["Installieren Sie die App für eine natürlichere Stimme.", "Installieren"],
+  pt: ["Instale o app para uma voz mais natural.", "Instalar"],
+  ru: ["Установите приложение для более естественного голоса.", "Установить"],
+  ar: ["ثبّت التطبيق للحصول على صوت أكثر طبيعية.", "تثبيت"],
+  hi: ["अधिक स्वाभाविक आवाज़ के लिए ऐप इंस्टॉल करें।", "इंस्टॉल"],
+  id: ["Pasang aplikasi untuk suara yang lebih alami.", "Pasang"],
+  vi: ["Hãy cài ứng dụng để có giọng tự nhiên hơn.", "Cài đặt"],
+  th: ["ติดตั้งแอปเพื่อเสียงที่เป็นธรรมชาติยิ่งขึ้น", "ติดตั้ง"],
+  tr: ["Daha doğal bir ses için uygulamayı yükleyin.", "Yükle"],
+  it: ["Installa l'app per una voce più naturale.", "Installa"],
+};
+
+function showInstallRecommendation() {
+  try {
+    if (localStorage.getItem("installTipDismissed") === "1") return;
+  } catch (err) {
+    // 保存できない環境では毎回出してよい
+  }
+  const caps = deviceTtsCaps();
+  if (caps.standalone || deviceTtsRoute() === "local-app") return;
+  const lang = navigator.language || "en";
+  const tip = INSTALL_TIPS[lang] || INSTALL_TIPS[lang.split("-")[0]] || INSTALL_TIPS.en;
+  const bar = document.createElement("div");
+  bar.setAttribute("role", "status");
+  bar.style.cssText =
+    "position:fixed;left:0;right:0;bottom:0;z-index:9999;display:flex;gap:8px;align-items:center;justify-content:center;" +
+    "padding:8px 12px;background:#222;color:#fff;font-size:14px;flex-wrap:wrap";
+  const msg = document.createElement("span");
+  msg.textContent = tip[0];
+  const link = document.createElement("a");
+  link.href = "https://github.com/aon-co-jp/maid-cafe-english/releases/latest";
+  link.target = "_blank";
+  link.rel = "noopener";
+  link.textContent = tip[1];
+  link.style.cssText = "color:#ffd54f;font-weight:bold";
+  const close = document.createElement("button");
+  close.textContent = "×";
+  close.setAttribute("aria-label", "close");
+  close.onclick = () => {
+    bar.remove();
+    try {
+      localStorage.setItem("installTipDismissed", "1");
+    } catch (err) {
+      // 無視
+    }
+  };
+  bar.append(msg, link, close);
+  document.body.appendChild(bar);
+}
+
+window.addEventListener("load", () => setTimeout(showInstallRecommendation, 2500));
+window.__deviceTts = { caps: deviceTtsCaps, route: deviceTtsRoute };
+
 /** 整えたテキストを分割して読み上げキューに積む。最後の発話が終わったらonEndを呼ぶ。 */
 function enqueueSpeech(text, lang, isHelper, onEnd) {
   const chunks = splitSpeechChunks(text, lang);
@@ -2602,9 +2735,9 @@ async function personaPromptText() {
     ? "You are Tora, a courteous butler teacher. Use short sentences around one key word, smile, use gestures, find common topics, and praise every attempt."
     : "You are Sakura, a cheerful maid teacher. Use short sentences around one key word, smile, use gestures, find common topics, and praise every attempt.";
   try {
-    const url = location.hostname.endsWith("easy-web.tokyo")
+    const url = isOwnOriginHost()
       ? "/openenglish.v1.Persona/Prompt"
-      : "https://easy-web.tokyo/open-english/v1/public/persona/prompt";
+      : "https://maid-cafe.tokyo/openenglish.v1.Persona/Prompt";
     const res = await fetchWithTimeout(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -3358,7 +3491,7 @@ async function askTrainer(userText) {
     // `/v1/public/aruaru-llm/v1/generate`という二重パスになってしまう
     // (実機で404を確認して発覚したバグ、2026-09-12)。先頭の`/v1`を
     // 取り除いてから公開プロキシのプレフィックスへ付け替える。
-    res = await fetchWithTimeout(`/v1/public/aruaru-llm${endpoint.replace(/^\/v1/, "")}`, fetchOpts, timeoutMs);
+    res = await fetchWithTimeout(useWebSearch ? "/openenglish.v1.AruaruLlm/GenerateWithSearch" : "/openenglish.v1.AruaruLlm/Generate", fetchOpts, timeoutMs);
   }
   if (!res.ok) {
     // 本文にaruaru-llm側の`error`フィールドが入っていることがあるので、
@@ -4129,7 +4262,7 @@ function topicGuideSuffix(userText) {
 // あわせて(ユーザー指示「日本語の場合は日本の今日のニュースを、英語の場合はアメリカの
 // ニュースを検索」): サーバー接続先国に固定された`/v1/news/latest`ではなく、質問の言語
 // から判定した国を指定できる`/v1/news/for?country=...`を使う。
-const SHARED_NEWS_FOR_ABSOLUTE_URL = "https://easy-web.tokyo/open-english/v1/public/news/for";
+const SHARED_NEWS_FOR_ABSOLUTE_URL = "https://maid-cafe.tokyo/openenglish.v1.News/For";
 function newsCountryForUserText(userText) {
   // 対応中の非英語言語(学びたい言語/応答言語)は、それぞれの国名を返す。
   // 未対応の組み合わせ・自動判定不能な場合は、日本語を含むかどうかで日本/アメリカを選ぶ
@@ -4164,10 +4297,10 @@ function mentionsPastNews(userText) {
 }
 async function archiveNewsSuffix(country) {
   try {
-    const url = location.hostname.endsWith("easy-web.tokyo")
+    const url = isOwnOriginHost()
       ? `/openenglish.v1.News/ArchiveSearch?q=${encodeURIComponent(country)}&limit=3`
-      : `https://easy-web.tokyo/open-english/v1/public/news/archive-search?q=${encodeURIComponent(country)}&limit=3`;
-    const res = await fetchWithTimeout(url, { cache: "no-store" }, AUX_TIMEOUT_MS);
+      : `https://maid-cafe.tokyo/openenglish.v1.News/ArchiveSearch?q=${encodeURIComponent(country)}&limit=3`;
+    const res = await fetchWithTimeout(url, { method: "POST", cache: "no-store" }, AUX_TIMEOUT_MS);
     const data = await res.json();
     if (!data.items || data.items.length === 0) return "";
     const lines = data.items.map((i) => `・[${i.date || "?"}] ${i.title}${i.link ? ` (${i.link})` : ""}`).join("\n");
@@ -4184,7 +4317,7 @@ async function archiveNewsSuffix(country) {
 // Q&Aが先頭、これまでの返答(英会話の先生の口調)はその下に残す。Q&Aに接続できないときは、従来のニュース表示に戻す。
 async function newsQaCompose(userText, reply) {
   if (!mentionsNewsTopic(userText)) return reply;
-  const url = location.hostname.endsWith("maid-cafe.tokyo") ? "/openenglish.v1.News/Ask" : "https://maid-cafe.tokyo/v1/public/news/ask";
+  const url = location.hostname.endsWith("maid-cafe.tokyo") ? "/openenglish.v1.News/Ask" : "https://maid-cafe.tokyo/openenglish.v1.News/Ask";
   try {
     const res = await fetchWithTimeout(`${url}?q=${encodeURIComponent(userText)}`, { cache: "no-store" }, AUX_TIMEOUT_MS);
     if (!res.ok) throw new Error("HTTP " + res.status);
@@ -4202,10 +4335,10 @@ async function newsSuffix(userText) {
   if (!mentionsNewsTopic(userText)) return "";
   const country = newsCountryForUserText(userText);
   try {
-    const url = location.hostname.endsWith("easy-web.tokyo")
+    const url = isOwnOriginHost()
       ? `/openenglish.v1.News/For?country=${encodeURIComponent(country)}`
       : `${SHARED_NEWS_FOR_ABSOLUTE_URL}?country=${encodeURIComponent(country)}`;
-    const res = await fetchWithTimeout(url, { cache: "no-store" }, AUX_TIMEOUT_MS);
+    const res = await fetchWithTimeout(url, { method: "POST", cache: "no-store" }, AUX_TIMEOUT_MS);
     const data = await res.json();
     if (!data.items || data.items.length === 0) {
       const reason = data.last_error ? ` (${data.last_error})` : "";
@@ -10775,7 +10908,7 @@ function saveCustomQaPairs(pairs) {
 // スマホ版でも…毎回最新のDATABASE Q&AのDATAもdemoと同じ様にAIが自動回答
 // するように」への対応)。VPS側はこの読み取り専用エンドポイントに
 // `Access-Control-Allow-Origin: *`を付けてCORSを許可済み。
-const SHARED_CUSTOM_QA_ABSOLUTE_URL = "https://easy-web.tokyo/open-english/v1/custom-qa";
+const SHARED_CUSTOM_QA_ABSOLUTE_URL = "https://maid-cafe.tokyo/openenglish.v1.CustomQa/CustomQaGet";
 
 // WEB版(easy-web.tokyo/open-english)で開発者が登録した無料枠プロバイダ
 // (Google検索→ChatGPT→Gemini→DeepSeek→Grok、日毎に自動で次へ切替)を、
@@ -10813,10 +10946,10 @@ function getSelectedAis() {
     return [];
   }
 }
-const SHARED_PRIORITY_PROVIDER_ABSOLUTE_URL = "https://easy-web.tokyo/open-english/v1/public/chat-providers/complete-priority";
+const SHARED_PRIORITY_PROVIDER_ABSOLUTE_URL = "https://maid-cafe.tokyo/openenglish.v1.ChatProviders/CompletePriority";
 async function trySharedPriorityProviderReply(prompt) {
   if (isCloudOff()) return null;
-  const url = location.hostname === "easy-web.tokyo" ? "/openenglish.v1.ChatProviders/CompletePriority" : SHARED_PRIORITY_PROVIDER_ABSOLUTE_URL;
+  const url = isOwnOriginHost() ? "/openenglish.v1.ChatProviders/CompletePriority" : SHARED_PRIORITY_PROVIDER_ABSOLUTE_URL;
   try {
     // 2026-09-22追加: 文字入力・音声入力・言語翻訳に「自信がない」と判定できたときは、
     // 共有WEB版の呼び出しにもGoogle検索の裏取りを付ける(`shouldBoostWithGoogleSearch`)。
@@ -10847,9 +10980,11 @@ async function fetchSharedCustomQaPairs() {
   // (デモはサーバー側で本番へ中継、本番は自分自身のDBを返す)。それ以外
   // (PC/タブレット/スマホ版のローカルサーバー)は絶対URLで本番へ直接
   // fetchする。
-  const url = location.hostname === "easy-web.tokyo" ? "/openenglish.v1.CustomQa/CustomQaGet" : SHARED_CUSTOM_QA_ABSOLUTE_URL;
+  const sameOrigin = isOwnOriginHost();
+  const url = sameOrigin ? "/openenglish.v1.CustomQa/CustomQaGet" : SHARED_CUSTOM_QA_ABSOLUTE_URL;
   try {
-    const res = await fetchWithTimeout(url, { cache: "no-store" }, 4000);
+    // サーバー側はConnect(POST)。GETだと405で常に空になり、DBの回答(消費税・核武装など)が出なかった。
+    const res = await fetchWithTimeout(url, { method: "POST", headers: { "content-type": "application/json" }, body: "{}", cache: "no-store" }, 4000);
     if (!res.ok) return [];
     const data = await res.json();
     const pairs = Array.isArray(data.pairs) ? data.pairs : [];
@@ -18872,11 +19007,11 @@ const INSTALLER_QUICK_LINK_CLOSED_KEY = "open-english.installerQuickLinkClosed";
   };
   const nameOf = (id) => AI_NAMES[id] || id;
   const sharedBase = () =>
-    location.hostname.endsWith("easy-web.tokyo") ? "/open-english" : "https://easy-web.tokyo/open-english";
+    isOwnOriginHost() ? "" : "https://maid-cafe.tokyo";
   let lastStatus = null;
   async function refreshAiInUse() {
     try {
-      const res = await fetch(sharedBase() + "/openenglish.v1.ChatProviders/Active", { cache: "no-store" });
+      const res = await fetch(sharedBase() + "/openenglish.v1.ChatProviders/Active", { method: "POST", cache: "no-store" });
       if (!res.ok) throw new Error("HTTP " + res.status);
       const s = await res.json();
       try {
@@ -19227,6 +19362,62 @@ const INSTALLER_QUICK_LINK_CLOSED_KEY = "open-english.installerQuickLinkClosed";
   apply(stored(), false);
 })();
 
+// 2026-11-12 ユーザー指示「質問の回答が一瞬で消えるBUG。バージョンアップやメンテナンスがあっても自動修復」:
+// 画面が再読み込みされても(更新・メンテナンス・古い画面の自動修復など、理由を問わず)、直前の会話(質問と答え)を元に戻す。
+// 置き場所は、このタブのsessionStorageだけ(サーバーへは送らない。タブを閉じれば消える)。1時間を過ぎた発言は戻さない
+// (「1時間以上前の会話を自動で消す」の約束を守る)。
+(function setupChatSelfRepair() {
+  const KEY = "openEnglish.chatSnapshot";
+  const MAX_ITEMS = 30;
+  const MAX_CHARS = 150000;
+  window.__chatRestored = false;
+  try {
+    const raw = sessionStorage.getItem(KEY);
+    if (raw) {
+      const items = JSON.parse(raw);
+      const now = Date.now();
+      let n = 0;
+      if (Array.isArray(items)) {
+        for (const it of items) {
+          if (!it || typeof it.text !== "string" || !(it.ts > 0) || now - it.ts >= CHAT_RETENTION_MS) continue;
+          const div = appendMessage(String(it.role || "trainer"), it.text);
+          div.dataset.ts = String(it.ts); // 元の時刻のまま(1時間の自動削除の基準を変えない)
+          n++;
+        }
+      }
+      window.__chatRestored = n > 0;
+    }
+  } catch (e) {
+    // 戻せなくても、通常どおり新しい会話として始める
+  }
+  const logNode = document.getElementById("log");
+  if (!logNode) return;
+  let timer = null;
+  const save = () => {
+    timer = null;
+    try {
+      const out = [];
+      for (const el of Array.from(logNode.querySelectorAll(".msg"))) {
+        const ts = Number(el.dataset.ts);
+        if (!(ts > 0) || el.dataset.noSnapshot === "1") continue;
+        out.push({ role: el.dataset.role || "trainer", text: el.textContent || "", ts });
+      }
+      let kept = out.slice(-MAX_ITEMS);
+      let json = JSON.stringify(kept);
+      while (json.length > MAX_CHARS && kept.length > 1) {
+        kept = kept.slice(1);
+        json = JSON.stringify(kept);
+      }
+      sessionStorage.setItem(KEY, json);
+    } catch (e) {
+      // 保存できなくても、会話そのものは続けられる
+    }
+  };
+  new MutationObserver(() => {
+    if (!timer) timer = setTimeout(save, 400);
+  }).observe(logNode, { childList: true, subtree: true, characterData: true }); // 返信は後から同じ吹き出しの中身が書き換わるので、中身の変化も見る
+})();
+
 // 2026-10-30 ユーザー指示: 画面かアプリを起動したら、「お帰りなさいませ!ご主人様!美味しくなーれ…」とお出迎えする。
 // 文字は、開いた直後にチャットへ出す。声は、ブラウザの決まり(最初の操作の後でないと声を出せない)により、最初のタップ/キー入力の後に1回だけ。
 // 音声OFF(🔇)のときは、文字だけで声は出さない。
@@ -19236,7 +19427,10 @@ const INSTALLER_QUICK_LINK_CLOSED_KEY = "open-english.installerQuickLinkClosed";
     const text = helper
       ? "Welcome back, master! / お帰りなさいませ、ご主人様!\nいらっしゃいませ。今日も一緒に学びましょう! / Let's learn together today!"
       : "Welcome home, master! / お帰りなさいませ!ご主人様!\n美味しくなーれ、萌え萌えキュ-ン♡ 萌え萌えキュ-ン♡ / Delicious, moe moe kyun!♡ Moe moe kyun!♡";
-    appendMessage("trainer", text);
+    if (!window.__chatRestored) {
+      const gdiv = appendMessage("trainer", text);
+      gdiv.dataset.noSnapshot = "1";
+    }
     const say = "お帰りなさいませ!ご主人様!美味しくなーれ、萌え萌えキュ〜ン!萌え萌えキュ〜ン!";
     let spoken = false;
     // 声を出す。ブラウザが「操作の前の自動再生」を断った(not-allowed)ときは、onBlockedを呼ぶ。

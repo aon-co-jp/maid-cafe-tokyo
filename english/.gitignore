@@ -29,3 +29,7 @@
 /data-science-path.json
 /web-dev-path.json
 /icons/
+
+# 実行時の生成物・手元のバックアップ(2026-11-05)
+greeting.wav
+*.bak-*

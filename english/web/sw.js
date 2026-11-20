@@ -19,7 +19,7 @@
 //   キャッシュ更新戦略(stale-while-revalidate等)は組まず、
 //   シンプルな「ネットワーク優先、失敗時のみキャッシュ」に留める。
 
-const CACHE_NAME = "open-english-shell-v1";
+const CACHE_NAME = "open-english-shell-v2";
 const SHELL_ASSETS = [
   "./",
   "./index.html",

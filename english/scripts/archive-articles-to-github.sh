@@ -9,7 +9,7 @@
 # 記事の本文は保存しない(RSSの見出し・短い要約・日付・リンクだけ)。
 #
 # 記事は、open-english-serverが毎時RSSから集めてSQLiteにためている。ここでは、前回書き出した後の分だけを、
-# サーバー内からだけ読めるAPI(GET /v1/internal/news/export?since=)で受け取る。
+# サーバー内からだけ読めるAPI(POST /openenglish.v1.Internal/NewsExport、本文 {"since":<unix秒>})で受け取る。
 #
 # 環境変数(systemdユニット側で設定。既定は本番VPSの配置):
 #   OPEN_ENGLISH_DIR / OPEN_ENGLISH_BASE_URL / ARTICLES_WORK_DIR
@@ -40,7 +40,7 @@ done
 
 SINCE="$(cat "$STATE" 2>/dev/null || echo 0)"
 NOW="$(date +%s)"
-DATA="$(curl -fsS --max-time 60 "$BASE_URL/v1/internal/news/export?since=$SINCE")" || { log "エラー: 記事の取得に失敗しました(since=$SINCE)。"; exit 1; }
+DATA="$(curl -fsS --max-time 60 -X POST -H 'content-type: application/json' -d "{\"since\":\"$SINCE\"}" "$BASE_URL/openenglish.v1.Internal/NewsExport")" || { log "エラー: 記事の取得に失敗しました(since=$SINCE)。"; exit 1; }
 if [ -z "$DATA" ]; then
   log "新しい記事はありませんでした(since=$SINCE)。"
   [ "${DRY_RUN:-0}" = "1" ] || echo "$NOW" > "$STATE"

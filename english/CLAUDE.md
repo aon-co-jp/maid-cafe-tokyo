@@ -8588,50 +8588,64 @@ Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms
 - Интерфейсы, форма которых задана внешним стандартом (ACME, обратные вызовы OAuth, вебхуки сторонних сервисов, проверки работоспособности, статические файлы, OTLP), остаются обычным HTTP.
 - **Если есть сомнения — выбирайте Connect.**
 
+## aruaru-llm 呼び出しの Connect 化(2026-11-05)
 
-## 2026-11-19 世界情勢Q&A: 類義語で探し直す機能と、回答できなかった質問の学習(別アカウントでの再開用) / News Q&A: similar-word search and opt-in learning
+aruaru-llm は REST を全廃し `POST /aruaru_llm.v1.Llm/<Method>`(JSON)のみ受ける(同リポジトリ `connect-migration` ブランチ、main 未マージ・VPS 未反映)。open-english 側の呼び出し元を同時に直した。
+- **server**: `main.rs` に `llm_connect_url(Method)` を新設。`proxy_aruaru_llm_*`・`SearchRaw`・モデル選択/一覧・無料枠プロバイダ・管理画面の一覧・`line_bot.rs`(ChatProvidersCompletePriority/Transcribe)・`news_qa.rs`(Rerank)を Connect へ。もと GET のクエリ(`?country=`)は JSON 本文へ変換。
+- **web/app.js と mobile の webroot/app.js**: `connectNormalize`/`llmFetch` を追加(Connect URL なら POST + JSON、本文既定 `{}`)。呼び出しの URL を `/aruaru_llm.v1.Llm/<Method>` へ。もと DELETE は `Clear…`/`Reset…`、設定の POST は `Set…`、GET は `Get…`。
+- **scripts/archive-news-to-github.sh** は `NewsPruneArchive`。文書の旧パス表記(index.html 等)も更新。
+- open-english 自身の `/v1/public/...` は別方針なので変更なし(中継の内側だけ Connect)。
+- Kotlin は `compilePhoneDebugKotlin` 成功(実機未確認)。未了: aruaru-llm main マージ後の VPS 同時反映。
 
-### 日本語
-**何ができるようになったか**
-- 質問にぴったり合う保存記事が無いとき、**類義語**(例: 戦争→紛争/conflict、休戦→ceasefire)で保存記事を探し直します。見つかったときは、回答の先頭に「類義語で探しました」と日本語と英語で書きます。それでも見つからなければ、これまでどおり Google・YouTube・aruaru-search の案内を出します。
-- 次の質問では類義語を足しません: **数字を含む質問**(日付・番号は、言い換えると別の意味になるため)。足す類義語は**最大8語**です(多すぎると関係のない記事が混ざるため)。
-- **回答できなかった質問の学習**(既定はOFF): インストールした本人のPC(`localhost`、プロキシを通らない接続)から、本人が `learn=1` を付けて質問したときだけ働きます。保存するのは質問から取り出した**言葉と回数だけ**で、質問文そのものは保存しません。VPSなど公開サーバーでは働きません(実測で、テーブルが作られないことを確認)。多く出た言葉は `top_unanswered` で見られますが、**辞書には自動で入れません**(人が確認して `SYNONYMS` に足します)。
-- 変更は `server/src/news_qa.rs`(`similar_terms`・`record_unanswered`・`top_unanswered`)と `server/src/main.rs`(`news_ask`)です。コミット `bd7e026`・`9b421f2`・`6502c12`・`769c085`(`maid-cafe-english` の `master`)。テストは news_qa の16件が成功。
+### 古い画面の自動再読み込み(2026-11-05)
+切り替え後に旧パスの画面がブラウザに残る問題への対応。(1) `version.json` の `buildId` を更新(`auto-update.js` が5秒ごとに見て、変わっていれば `?v=` 付きで再読み込み)。(2) `app.js` の fetch ラッパーで、Connect 経路(`/openenglish.v1.*`・`/aruaru_llm.v1.Llm/*`)が404のとき、キャッシュを避けて自動で1回再読み込み(10分以内の再発は何もしない=無限ループ防止)。(3) Service Worker のキャッシュ名を v2 へ。**デプロイ時は `version.json` の `buildId` を必ず更新すること。**
 
-**本番(VPS)の状態**
-- 本番は `open-english` リポジトリのクローン(`/root/easy-web.tokyo/open-english`)から動いています。上のコミットは `maid-cafe-english` にあるため、同じ内容をパッチとして当て、ビルドして差し替えました(`open-english.service` と `open-english-demo.service` は active、`maid-cafe.tokyo` は200、エラーログ0)。
-- そのため、VPSのクローンには**未コミットの変更が残っています**。`git pull` する前に必ず確認してください。戻すときは `/root/open-english-server.before-similar-20261119` か `.before-learn-20261119` を使います。
+## 【v0.8.17 本番通し確認済み】CIが全て自動ビルドする初のリリース(2026-11-07)
+タグ `v0.8.17` のみで、CI(`build-android-native`・APK・Windows/Linux/macOS・Release添付・maid-cafe-englishミラー)が全ジョブ成功。添付5点(APK2・exe・Linux・macOS)。APKは unzip で `version.json`=0.8.17・両 .so に Connect の印を確認。**VPS自動更新は00:21に v0.8.17 を自動適用**(両サービス active、公開 version.json=0.8.17)。**公式APKを実機 moto g53y(Android 14)へ入れて確認**: 同梱2プロセス起動、aruaru-llm(ポート4600)の Connect Runtime 200・旧 `/v1/runtime` 404、アプリ内サーバー(ポート24601)の `openenglish.v1.Config/Config`・`PlatformInfo/PlatformInfo`・`Tts/Status`・`AruaruLlm/Runtime`・`AruaruLlm/Recommend` が200、画面は白くならずログイン案内を表示。署名はリリース用(デバッグ署名版は削除して入れ替え)。**落とし穴**: タグ後に `master` が進む(アーカイブbotのコミット)とpushが拒否される→タグを消し、rebaseしてから付け直す。**未了**: Windows/Linux/macOSインストーラーの実機の通し試験(CIのビルド成功のみ)。
 
-**まだ終わっていないこと**
-1. 学習をONにする**画面(ボタン)**がまだ無い。今は `learn=1` を付けた呼び出しだけで動く。
-2. localhost で実際に言葉が記録される場面の通し確認(判定は既存の `is_local_request` を使用)。
-3. 類義語表は15組だけ。実際に多く出た言葉を見て増やす。
-4. `open-english` リポジトリ側への取り込み(今は VPS のパッチのみ)。
+## 【解消済み(v0.8.16)】Connect移行とAndroid同梱バイナリの不整合(2026-11-06)
+**解消(2026-11-06)**: aruaru-llm は `[patch."https://github.com/aon-co-jp/open-cpu"]` で open-cpu を1系統にして Android リンクが通った(aruaru-llm main `dae7d25`)。3つの .so を Connect 版で再ビルドして `jniLibs/arm64-v8a` へ置き(`scripts/android-native-build.ps1`)、実機 moto g53y(Android 14)で起動・Connect 経路(aruaru-llm の Runtime 200・旧パス404、アプリ内サーバーの中継 200)を確認。**CIでの .so ビルドも整備済み(2026-11-06)**: `release.yml` の `build-android-native` が毎回3つの .so をビルド(glslc導入・cargo-ndk)→ `build-android` が jniLibs へ反映 → APK内に Connect 版の文字列(`aruaru_llm.v1.Llm`/`openenglish.v1.`)があることを検証(旧バイナリ混入ならリリース失敗)。試験: `workflow_dispatch` 実行でCI製APKを実機 moto g53y に入れ、aruaru-llm Runtime 200・旧パス404・アプリ内サーバー中継200を確認。v0.8.16 のAPKは unzip で新ライブラリ(ビルド済みと一致)を確認済み。コミット済みの jniLibs は手元ビルド用の予備。以下は解消前の記録。
+- **事実**: `mobile/android/app/src/main/jniLibs/arm64-v8a/` の `libopenenglishserver.so`(約8MB)と `libaruarullm.so` は**2026-09-15に作ってgitへコミットした旧バイナリ**(REST時代)で、CI(`release.yml`)はこれらを**ビルドしない**(Gradleが`web/`をassetsへ自動同期するだけ)。つまり**次の`v*`タグでAndroid APKを作ると、新しい画面(Connect呼び出し)+旧サーバー+旧aruaru-llm(REST)の組み合わせになり、Androidは動かなくなる**。v0.8.14までのAPKは旧一式で自己完結しているので現状の端末は無事。
+- **試したこと**: `cargo ndk -t arm64-v8a build --release`で`open-english-server`の再ビルドは成功(38分、41MB。実行ファイルは`server/target/aarch64-linux-android/release/open-english-server`)。`aruaru-llm`の再ビルドは**リンクで失敗**: `duplicate symbol: Java_tokyo_runo_openenglish_OpenCpuProbe_inventoryJson`(`open_cpu`のrlibが依存グラフに2系統=`libopen_cpu`と`libopen_cpu-e85b…`で入っている。`open-cpu`が同名JNIシンボルを持つようになったため)。`aruaru-llm`側で`open-cpu`を1系統にそろえる(パス依存の重複解消、またはJNI関数を`cdylib`限定にする)必要がある。
+- **未了/次の手順**: (1)`aruaru-llm`のAndroidリンクを直す→(2)両方をcargo ndkで再ビルドして`jniLibs`へ置く(サーバーは41MBと大きいので`strip`やLTOで縮める)→(3)APKを作り実機(moto g53y等)でConnect経路を確認→(4)タグ。**この3点が済むまでAndroidのタグ付けリリースはしない**(ミラーも含む)。
+### VPS の自動更新(2026-11-06)
+アプリ内の自己更新(`self_update.rs`)は「子プロセスを起動して自分は終了」という設計で systemd 管理のVPSには合わず、`version.json` が無いので `skipped` になっていた。代わりに `deploy/vps/open-english-autoupdate.{sh,service,timer}`(30分ごと)を使う: 最新Releaseが適用済みタグより新しければ、linuxのtarballを取得 → 別ポートで起動確認(隔離データ) → バックアップ(`/root/open-english-autoupdate-bak/`) → バイナリと静的ファイルを入れ替え → `open-english`・`open-english-demo` を再起動 → healthz確認 → 失敗なら自動ロールバック。適用済みタグは `/var/lib/open-english-autoupdate/applied-tag`。試験用の環境変数: `FORCE_TAG`・`DRY=1`・`OE_TEST_FAIL=1`。
 
-**再開用メッセージ(そのまま貼り付け)**: 「`F:\runo\repository\_work\mce`(maid-cafe-english)の `PORTING.md` 末尾『2026-11-19 世界情勢Q&A』を読んでから再開します。未了は、学習をONにする画面、localhost での記録の通し確認、類義語表の拡張、open-english 側への取り込みです。決まり: 新しいRESTは作らない、秘密は表示しない、質問文は保存しない、実機で確認してから完了と報告する。」
+## HANDOFF 2026-11-15
+- **日本語**: 詳細・未解決の最優先課題(国別ニュース話題の行が出ない)は`aruaru-llm/CLAUDE.md`の「HANDOFF 2026-11-15」。こちらは`web/`を正本とし、`mobile/android/.../webroot`へコピーして同期(差分は`README.md`のみ)。リリースは元の`open-english`に`v*`タグをpush。
+- **English**: Details and the top open issue (no country-news line in replies) are in "HANDOFF 2026-11-15" of `aruaru-llm/CLAUDE.md`. Here `web/` is the source of truth, copied into `mobile/android/.../webroot` (only `README.md` differs). Releases: push a `v*` tag to the original `open-english`.
+- **2026-11-15 追記(別アカウントで再開する人へ)**: **完了**: ①v0.8.17は、CIが3つのAndroid用.so(open-english-server/aruaru-llm/open-cpu)まで毎回ビルドする初の本番リリースとして通し確認済み(CI全ジョブ成功・APKの中身・VPS自動更新・実機moto g53y)。②Windowsインストーラー(v0.8.18)をこのPCで実機試験(サイレントのインストール・起動・アンインストール)。**不具合を発見・修正**: インストーラーが取るaruaru-llmの最新リリース(v0.2.4、2026-09-08)が旧REST版でConnectが404・チャット502 → `aruaru-llm`のリリースCIにglslc導入(Linux=`apt install glslc`、Windows=`choco install vulkan-sdk`+PATH)して**v0.2.5を公開**、取得し直してConnect `Runtime`=200・旧`/v1/runtime`=404・アプリ内サーバー経由200を確認。**未了**: Linux/macOSインストーラーの実機試験、Android実機で新しいaruaru-llm同梱の再確認は不要(v0.8.17で済み)、`aruaru-llm`のv0.2.5に元から未コミットだった`Cargo.lock`の変更が混入(CIは成功、中身は未精査)。**再開**: `aon-co-jp/open-english`(新名`maid-cafe-english`、`F:\open-english`)と`aon-co-jp/aruaru-llm`(`F:ruaru-llm`)。リリースは`web/version.json`と`mobile/android/app/src/main/assets/webroot/version.json`を上げ、`master`をpushしてから`v*`タグをpush(タグ後に`master`がボットで進むと拒否される→タグを消し、rebaseして付け直す)。**落とし穴**: ローカルの`jniLibs/*.so`と`server/Cargo.lock`の変更はビルドの残骸(コミットしない、`git stash`に退避済み)。Windowsの`Start-Process -Wait`は起動したアプリの終了まで待つので使わない。
+- **2026-11-15 addendum (for whoever resumes on another account)**: **Done**: (1) v0.8.17 was verified end to end as the first production release where CI builds the three Android .so files (open-english-server / aruaru-llm / open-cpu) every time (all CI jobs, APK contents, VPS auto-update, real moto g53y). (2) The Windows installer (v0.8.18) was tested on this PC (silent install, launch, uninstall). **A bug was found and fixed**: the installer fetches the latest `aruaru-llm` release (v0.2.4, 2026-09-08), which was the old REST build (Connect 404, chat 502) -> glslc was added to `aruaru-llm`'s release CI (Linux `apt install glslc`; Windows `choco install vulkan-sdk` + PATH) and **v0.2.5 was published**; after re-fetching, Connect `Runtime` = 200, old `/v1/runtime` = 404, and the in-app server relay = 200. **Open**: real-machine tests of the Linux/macOS installers; v0.2.5 of `aruaru-llm` also picked up a previously uncommitted `Cargo.lock` change (CI passed, contents not reviewed). **Resume**: `aon-co-jp/open-english` (now `maid-cafe-english`, `F:\open-english`) and `aon-co-jp/aruaru-llm` (`F:ruaru-llm`). To release: bump `web/version.json` and `mobile/android/app/src/main/assets/webroot/version.json`, push `master`, then push a `v*` tag (if the archive bot advances `master` after tagging, the push is rejected: delete the tag, rebase, re-tag). **Pitfalls**: local `jniLibs/*.so` and `server/Cargo.lock` changes are build leftovers (do not commit; stashed). PowerShell `Start-Process -Wait` waits for the launched app to exit; do not use it for the installer.
 
-### English (simple words, easy to read)
-**What is new**
-- When no saved news article matches a question, the app now tries **similar words** (for example, "war" and "conflict", or "truce" and "ceasefire"). If this finds articles, the answer starts with a short note in Japanese and English: "I searched with similar words." If nothing is found, the app still shows the Google, YouTube and aruaru-search links as before.
-- It does **not** add similar words when the question has **a number** in it (dates and numbers can change meaning if we swap words). It adds **at most 8** words, because too many words bring in unrelated news.
-- **Learning from unanswered questions** is **off by default**. It works only when the question comes from the owner's own PC (`localhost`, not through a proxy) **and** the owner adds `learn=1`. It saves only the **words and how many times they appeared**. It never saves the question itself. It does not work on public servers such as the VPS (we checked that the table is not even created). Common words can be listed with `top_unanswered`, but they are **never added to the dictionary automatically**. A person checks them and adds them to `SYNONYMS`.
-- Changed files: `server/src/news_qa.rs` (`similar_terms`, `record_unanswered`, `top_unanswered`) and `server/src/main.rs` (`news_ask`). Commits: `bd7e026`, `9b421f2`, `6502c12`, `769c085` (branch `master` of `maid-cafe-english`). All 16 news_qa tests pass.
+## HANDOFF 2026-11-18(別アカウントでの再開用)/ Resume on another account
+- **リポジトリ / Repos**: `maid-cafe-english`(正式)・`open-english`(旧、永久に残す。**タグは旧側へ push**、CI がミラー)。作業は `F:\open-english-connect` のクローンで行い、`F:\open-english` は触らない。コミット末尾は `Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>`。
+- **完了 / Done**: aruaru-llm 呼び出しの Connect 化(web/app.js・mobile webroot・server・line_bot・news_qa・scripts)、`staleCheck` による自動再読み込み、VPS 自動更新(`deploy/vps/open-english-autoupdate.*`)、Android ネイティブ .so の CI ビルド+APK 内検証、v0.8.15(旧.so入り、注意書き付き)→ v0.8.16 修正版。実機 moto g53y で確認済み。
+- **未了 / Open**: (1) 次のタグ(v0.8.17 等)で全 CI ビルドの本番通し確認。(2) `/open-english/demo/` の静的404(demo ユニットに `OPEN_ENGLISH_SERVER_ROOT` が無い)。(3) `server/Cargo.lock` が兄弟パス依存で環境依存(再現性なし)。(4) 実機のデバッグ署名アプリをアンインストールしてから正式 APK を入れる。(5) aruaru-IME デーモン経路の通し確認。
+- **注意 / Pitfalls**: Git Bash に python3 無し(`python`)、WSL パスは `MSYS_NO_PATHCONV=1`+スクリプトファイル、CLAUDE.md は他セッションの追記で衝突しやすい(両方残す)、秘密は出さない。
 
-**Production (VPS)**
-- Production runs from a clone of the `open-english` repository (`/root/easy-web.tokyo/open-english`). Our commits live in `maid-cafe-english`, so we applied the same change as a patch, built it and swapped the program (`open-english.service` and `open-english-demo.service` are active, `maid-cafe.tokyo` returns 200, no errors in the log).
-- Because of this, the VPS clone has **changes that are not committed**. Please check before you run `git pull`. To go back, use `/root/open-english-server.before-similar-20261119` or `.before-learn-20261119`.
+- **2026-11-18 追記 / Update**: `/open-english/demo/` の静的404を解消(VPSの`open-english-demo.service.d/30-serverroot.conf`で`OPEN_ENGLISH_SERVER_ROOT`を設定、`/`・`version.json`・`app.js`が200、公開URLも200)。スマホ実機のテストは中止(ユーザー指示)。/ Fixed the static 404 on `/open-english/demo/` via a systemd drop-in setting `OPEN_ENGLISH_SERVER_ROOT` (all 200). Phone testing is stopped by user instruction.
 
-**Not finished yet**
-1. There is **no button or screen** yet to turn learning on. Today it works only with a call that has `learn=1`.
-2. We have not yet watched words being saved on a real `localhost` run (the check itself uses the existing `is_local_request`).
-3. The similar-word table has only 15 groups. We should grow it by looking at the words people really use.
-4. The change is not yet in the `open-english` repository (it is only a patch on the VPS).
-
-**Message to paste when you continue**: "Read 'PORTING.md', the last section '2026-11-19 世界情勢Q&A', in `F:\runo\repository\_work\mce` (maid-cafe-english) before you start. Open items: a screen to turn learning on, a real localhost check of saving words, a bigger similar-word table, and moving the change into open-english. Rules: no new REST, never print secrets, never save the question text, and check on a real system before saying it is done."
+- **2026-11-18 続報 / Follow-up**: (1) 全CIビルドのリリースは v0.8.17・v0.8.18 で既に成功済み(v0.8.18はAndroidネイティブ3ジョブ含め全ジョブ成功、APK内に`aruaru_llm.v1.Llm`・`openenglish.v1.`を確認)=新タグ不要。(3) `Cargo.lock`は兄弟パス依存のため環境依存。CIは`--locked`を使わず、ロックは参考値と決定(依存の持ち方は変えない)。(5) aruaru-IME(VPS 4660): `aruaru_ime.v1.Ime/Key`は空本文で400(検証)=新経路稼働、旧`/v1/runtime`は404、公開`/ime/api/...`も400、直近6時間のエラーログ0。実入力変換は未確認。/ (1) all-CI releases already succeeded (v0.8.17, v0.8.18; APK contents verified), no new tag needed. (3) `Cargo.lock` stays environment-dependent; CI does not use `--locked`. (5) IME new route live, old 404, no errors; real typing unverified.
 
 ## 2026-11-20 低VRAM・VRAM無し端末(VPS・PC・タブレット・スマホ)でのAI/LLMのノウハウ / Low-VRAM AI know-how
 日本語: AI・LLMを使う機能(推論・要約・補完等)は [aruaru-llm/docs/LOW-VRAM-KNOWHOW.md](https://github.com/aon-co-jp/aruaru-llm/blob/main/docs/LOW-VRAM-KNOWHOW.md) に従う: 短い文脈・上限・タイムアウト、VPSで重い推論を直接回さない、メモリが足りなければ小さいモデルへ自動で下げる。広い桁(FP64以上)は本番で使わず、試験の正解にだけ使う。
 English: Features that use AI/LLMs follow the file above: short context, caps and timeouts, no heavy inference directly on the VPS, auto-downgrade to a smaller model when memory is short. Wide floats (FP64 and above) are for test oracles only, not production.
+
+
+## HANDOFF 2026-11-19(別アカウントでの再開用 / Resume on another account)
+### 日本語
+- **ひとことで**: 会話の記録と設定を保存する「データベース機能」は、もう動いています。(1)手元のSQLiteに保存、(2)つなげれば aruaru-db / PostgreSQL にも同じ内容を写す(片方が壊れても、もう片方から直せる)、(3)保存場所を選べる、(4)rsyncでバックアップ(送り先も選べる)、(5)rsyncが無い人には「RSyncをインストールしましょう!」と案内して自動で入れる、(6)昔のデータの取り込み。
+- **旧データ取り込み**: `import_legacy` と `POST /openenglish.v1.Db/MigrateLegacy` が `server/src/` にあります。ただし、取り込む昔のデータは実際には存在しないので、どんなデータでも受けられる「入口」だけ作ってあります。
+- **場所(リポジトリ)**: `F:\open-english`(GitHub: `aon-co-jp/maid-cafe-english`。古い `aon-co-jp/open-english` もずっと残します。リリースのタグは古い方へ送ると、新しい方へコピーされます)、`F:\runo`(全体の目次)、`F:\aruaru-llm`。
+- **まだ確かめていないこと**: rsyncの自動インストールが成功する場面。このPCには winget も choco も無いためです。
+- **気をつけること**: 作業中の別の変更(`server/src/main.rs` のニュース検索、`web/app.js`)が残っています。origin より約33コミット遅れています。`git pull` は慎重に。コミットは自分の変更だけにしてください。
+
+### English (simple and friendly)
+- **In short**: The "database feature" that saves chats and settings already works. (1) It saves to a local SQLite file. (2) If you connect aruaru-db / PostgreSQL, it keeps a copy there too, so if one side breaks, the other side can fix it. (3) You can choose where to save. (4) You can back up with rsync and choose where the backup goes. (5) If rsync is missing, the app says "Let's install RSync!" and installs it for you. (6) It can import old data.
+- **Importing old data**: `import_legacy` and `POST /openenglish.v1.Db/MigrateLegacy` are in `server/src/`. But there is no real old data anywhere, so we only built a general "front door" that accepts any data.
+- **Where things live**: `F:\open-english` (GitHub: `aon-co-jp/maid-cafe-english`; the old `aon-co-jp/open-english` stays forever; push release tags to the old one and they are copied to the new one), `F:\runo` (the big table of contents), `F:\aruaru-llm`.
+- **Not checked yet**: the case where the rsync auto-install really succeeds. This PC has no winget or choco.
+- **Please be careful**: Some other work is still unfinished (news search in `server/src/main.rs`, and `web/app.js`). The repo is about 33 commits behind origin. Be careful with `git pull`, and commit only your own changes.
 
 ## 2026-11-20 融合の記録: maid-cafe.tokyo / Fusion record
 **日本語**: このリポジトリ(英会話・学習)は、データ分析の realdata.pro と融合して **maid-cafe.tokyo** になりました。融合後の入口・配備の正本は [`maid-cafe-tokyo`](https://github.com/aon-co-jp/maid-cafe-tokyo) です。ここのコードは、融合後も英会話・学習の部品(open-english-server)として使われ続けます。リリースやミラーの手順は変えていません(コード自体の統合は、配備を壊さないよう別途、試験してから行います)。
