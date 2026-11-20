@@ -140,3 +140,7 @@ Front end is **`open-web-server`, not Caddy** (domain routing lives in the VPS `
 - **WASM по-прежнему остаётся технологией для интерфейса.** Изменилось лишь то, что вызываемый им API теперь построен на Connect.
 - Интерфейсы, форма которых задана внешним стандартом (ACME, обратные вызовы OAuth, вебхуки сторонних сервисов, проверки работоспособности, статические файлы, OTLP), остаются обычным HTTP.
 - **Если есть сомнения — выбирайте Connect.**
+
+## 2026-11-20 融合の記録: maid-cafe.tokyo / Fusion record
+**日本語**: このリポジトリが、英会話・学習(maid-cafe-english、旧open-english)と データ分析(realdata.pro)を融合した **maid-cafe.tokyo** の入口・配備の正本です。英会話の部品(open-english-server)は、融合後も英会話・学習の部品(open-english-server)として使われ続けます。リリースやミラーの手順は変えていません(コード自体の統合は、配備を壊さないよう別途、試験してから行います)。
+**English**: This repository is the entrance and deployment source of truth of **maid-cafe.tokyo**, the fusion of English learning (maid-cafe-english, formerly open-english) and data analysis (realdata.pro). The English-learning code (open-english-server) keeps serving as the English-learning part (open-english-server). Release and mirror steps are unchanged; merging the code itself will be done separately, after tests, so as not to break deployment.
