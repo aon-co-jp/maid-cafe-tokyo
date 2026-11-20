@@ -1,0 +1,576 @@
+# PORTING / 設計と計画
+
+## やさしい現状と次の一歩 / Where we are and what is next
+
+### 日本語
+**できていること**
+- 世界リサーチ(国・都道府県・市の選択、分野のチェック、翻訳、AIのまとめ)。
+- 毎朝7時の日本全国23か所の自動収集(GitHubの非公開の保管庫に保存)。
+- 無料の自前検索 `aruaru-search`(約130言語、壊れたら AI が直す、使いすぎで止められたら休んで自動でもどる)。
+- 画面の「検索と毎朝の自動収集の状態」。再起動しても直近の収集が見られます。
+- 保管庫が大きくなったら新しいリポジトリへ自動で引っ越します。
+
+**最近の実測(VPSのログ)**: 11/14〜11/19 の毎朝の収集は、23か所がほぼ毎回成功。失敗が1か所出た日もありますが、そこで止まらずに最後まで進みます。失敗の中身は、検索元が止めた場合と、その場所に該当する情報がなかった場合(いまは「該当なし」として別に数えます)に分かれます。
+
+**これから**
+1. 検索元ごとの失敗の傾向を、数日分ためて見る(Bing・Yahoo!は「検索語の一部しか反映されない」、Braveは「アクセス過多」が多い)。
+2. Naver・Baiduの品質調整。
+3. 日本語・英語・中国語以外の言語でのリサーチ。
+4. 各社の無料枠を毎朝確認する機能。
+5. ドメインは `realdata.pro`。別の名前にするなら、先に本人が決めます。
+
+### English (simple and friendly)
+**What already works**
+- World research: pick a country, a prefecture and a city, tick topics, translate, and get an AI summary.
+- The daily crawl at 7:00 for 23 places across Japan, saved in a private GitHub vault.
+- Our own free search, `aruaru-search`: about 130 languages, an AI fixes it when it breaks, and it rests and returns by itself when a service says "too many requests".
+- The status box "search and daily crawl". It shows the latest run even after a restart.
+- When the vault gets big, it moves to a new repository by itself.
+
+**Recent real numbers (VPS logs)**: From Nov 14 to Nov 19, the daily crawl almost always collected all 23 places. On some days one place failed, but the crawl did not stop there. A failure is one of two things: a search service said no, or the place simply had nothing matching (we now count that separately as "nothing found").
+
+**Next steps**
+1. Collect a few more days of data and look at how each search source fails (Bing and Yahoo! often return "only part of the words were used", and Brave often says "too many requests").
+2. Tune the quality of Naver and Baidu.
+3. Research in languages other than Japanese, English and Chinese.
+4. A daily check of each company's free plan.
+5. The domain stays `realdata.pro`. If you want another name, the owner decides first.
+
+
+## 設計思想
+
+1. **誰でも使える**: 大企業・中小企業・これから起業する人の誰もが、専門知識なしで使えること。
+   - ファイルを選ぶだけで始められる。操作は日本語で案内し、エラーは「何をすればよいか」を書く。
+   - 単一バイナリで、インストールも保守も簡単にする。無料のOSSとして提供し、realdata.pro でホスト版も用意する。
+   - 同じ機能を GraphQL でも提供し、社内システムや Python/R からも使えるようにする。
+2. **エコシステムで作る**: Rust を基盤に、open-web-server・RPoem・open-cuda・aruaru-db・aruaru-llm・
+   open-directx の上に組み立てる。同じ機能をこのリポジトリで重ねて実装しない。
+3. **周りを壊さない(2026-09-24 追加)**: ビルド・検査・整形が、ユーザーの作業ツリーや他のリポジトリを
+   一切変更しないこと。
+   - 依存リポジトリは `deps.lock` でコミットを固定し、`scripts/fetch-deps` で `.deps/`(Git 管理外)へ取得する。
+     `F:\` 直下の作業ツリーは参照しない。
+   - 整形・検査は自リポジトリのクレートに限定する(`cargo fmt-own` / `lint-own` / `test-own`)。
+   - CI の最後に「`.deps/` が一切変更されていない」ことを検査する。
+   - `.deps/` に手作業の変更があれば、`fetch-deps` は上書きせずに停止する。
+   - 経緯: `cargo fmt --all` がパス依存先の兄弟リポジトリ約200ファイルを整形してしまう事故が起きた。
+     HEAD を rustfmt した結果と一致するものだけを戻して復旧した。
+4. **REST を増やさない**: エコシステムの方針に従い、操作は `POST /graphql` 1本に集約する。
+5. **SAS 社の資産を複製しない**: 機能の方向性のみを参考にし、コード・API・言語仕様は複製しない。
+
+## フェーズ
+
+| フェーズ | 内容 | 状態 |
+|---|---|---|
+| P0 | 列指向 DataFrame・CSV 入出力・型推論・クレンジング・要約統計・group by・相関・単回帰・CLI | ✅ 2026-09-24 |
+| P1 | open-cuda で重回帰、RPoem + GraphQL サーバー、ノーコード Web UI、依存の固定取得 | ✅ 2026-09-24 |
+| P1.5 | 取り込み元の追加: 検索ワード(Google / YouTube / GitHub、aruaru-llm `POST /v1/search/raw` 経由)、調査対象 URL(CSV・JSON・HTML の表・リンク一覧、SSRF 対策付き) | ✅ 2026-09-24 |
+| P3 | aruaru-llm 連携: 分析結果を日本語・英語と、約130言語から選んだ1言語で説明する(同意必須、生データは既定で送らない) | ✅ 2026-09-24 |
+| P2 | aruaru-db 連携: データセットの保存・読込、`commit()` で分析の版を記録し、`AS OF COMMIT` で再現する | 次 |
+| P4 | open-directx 連携: GPU(Vulkan)でグラフ(棒・円)を PNG に描く。GPU が無い環境では、open-cpu の実行時判定で AVX-512(16画素並列)/ AVX2(8画素並列)/ スカラーの CPU ラスタライザで描く(`rrd-render`、GraphQL `renderChart`) | ✅ 2026-09-24(デスクトップビューアは未着手) |
+| P5 | realdata.pro 公開: open-web-server を前段(TLS/ACME・ドメイン振り分け)にして VPS で運用する | |
+| P6 | 日付型・join・ピボット・Parquet、ロジスティック回帰・決定木・k-means | |
+| P7 | GPU バックエンド(Vulkan/DirectX)での GEMM、複数ノード分散 | |
+
+## 起業・企業向けサービス(サンプル)と資金運用情報(2026-09-24)
+
+- **サンプル(模擬)画面**: 融資のお申込み・信用調査・与信・債権回収状況・不動産投資。
+  - 画面には日本語と英語で「サンプルです」と表示する。
+  - 融資の審査は、ブラウザ内の計算だけで行う(fetch を使わず、サーバーへ送らない・保存しない)。
+  - 信用調査・債権回収・不動産は、架空のデータだけを表示する。
+  - 実際の融資を業として行うには貸金業の登録が必要なため、申込みは受け付けない。
+- **資金運用・投資の参考情報(`market.rs`、公的データ、3時間ごとに更新)**:
+  - BIS の政策金利(約50の国・地域)
+  - 国債利回り(財務省・米国財務省・ECB)
+  - 為替(ECB の参照レートを円換算)
+  - いずれも日次の公表値。画面に出典・基準日と「投資助言ではありません」を表示する。
+- **外貨定期預金の金利(`deposits.rs`、毎朝7時に自動収集)**:
+  1. aruaru-llm で「外貨定期預金 ○○ 金利」を検索し、上位ページを SSRF 対策付きで取得する。
+  2. AI に銀行・期間・年利・条件を抜き出させる。
+  3. **年利(%付き)と銀行名が本文に書かれているものだけを採用する。**
+  - 結果は `RRD_DATA_DIR`(既定 `data/`、Git 管理外)に保存する。
+  - 手動の再収集(`collectDepositRates`)は、前回から6時間以内は受け付けない。
+  - 2026-09-24 の実行結果は110件。同じ銀行・期間で金利が複数あったため(金額の段階・円からか外貨からか・法人)、「条件」を追加した。
+- **仕事・研修**: 求人は audiocafe.tokyo の既存ページへリンクする。夜間の仕事には「18歳未満不可」と表示する。
+  IT 研修・転職エージェントは「準備中」(ユーザー指示)。
+
+## 自動性能検査と経路の自動選択(`rrd-tune`、2026-09-24)
+
+- **検査(毎日自動)**: 起動時に構成(CPU の命令・GPU・NPU)を調べ、**その日(日本時間)にまだ検査していなければ**裏で検査する
+  (その日の最初の起動)。同じ日の再起動で構成が同じなら、前回の結果を再利用する。起動したままでも**毎朝7時(日本時間)**に検査し直す。
+  構成が変わった(GPU の付け替えなど)・結果が無いときは、いつでも検査する。画面の「今すぐ検査し直す」でも実行できる。
+  (2026-09-25 に「7日ごと」から変更。検査は release で約22秒、VPS は約4秒。)
+- **測るもの**: 行列積(重回帰。6つの大きさ)とグラフ描画(3つの大きさ)。経路は CPU(open-cuda + open-cpu の SIMD)と
+  GPU(open-cuda の Vulkan、描画は open-directx)。
+- **正しさの確認**: GPU の結果は CPU の結果と突き合わせ、一致しなければ(速くても)採用しない。
+- **決定と割合**: 大きさごとに最速の経路を選び、そこから「割り当ての割合」(処理の数・処理量)を計算する。
+  実行時は、処理の大きさに最も近い実測点の決定を使う。実際に選ばれた回数は「使用実績」として別に数える。
+- **AI の役割**: `explainProfile` が、実測値の解釈・異常の指摘・改善の提案を日本語で返す(aruaru-llm の認識も添える)。
+  **経路の選択は実測の数値だけで決め、AI の回答では変えない。** AI へ送るのは機器の名前と実測値のみで、同意が必須。
+- **NPU**: 検出だけを報告し、割り当てない。open-cuda / open-directx / aruaru-llm のどれにも、NPU へ計算を渡す実行経路が無いため
+  (aruaru-llm の `/v1/accelerators` も同じ免責を返す)。実行経路ができれば、`rrd-tune` に経路を1つ足すだけで対象にできる。
+- **重要な発見**(2026-09-24): 検査は **release ビルドで行うこと**。debug ビルドでは CPU(SIMD)側が最適化されず、
+  大幅に遅く出て、GPU が速いという誤った結論になる(実例: 16×100000×16 で debug は GPU が 3.7 倍速く、release は CPU が 11 倍速い)。
+  そのため、ビルドの種類を構成の一部として扱い、release で動かすと必ず検査し直す。debug の結果には注意書きを付ける。
+- 開発機(Ryzen 9 3950X + GeForce GT 730)の release での結果: 行列積・描画ともにすべて CPU が最速(2位と 6〜90 倍差)。
+  CPU 経路と、`RRD_COMPUTE=gpu` で固定した GPU 経路で、3万行の重回帰の係数・決定係数が完全に一致することを確認した。
+  VPS(GPU なし)は CPU(AVX-512)だけで検査する。
+- 動作確認用に、環境変数 `RRD_COMPUTE=cpu|gpu` で経路を固定できる(未設定または `auto` なら実測に従う)。
+- 実 GPU の結果が変わる例として、性能の高い GPU を積んだ機器では、大きい行列積で GPU が選ばれる想定。
+  この機器では GPU が勝つ場面が無かったため、その分岐は実機では未確認(選択ロジックは合成データの単体テストで確認済み)。
+
+## aruaru-db による保存と版管理(P2、2026-09-24)
+
+- `RRD_DB_DSN` を設定すると、データセットを aruaru-db に保存し、「版」を記録できる(`store.rs`)。
+  - **保存**: `saveDataset` が `rrd_datasets` に保存し、`SELECT aruaru_commit()` でその時点を版として記録する。
+    利用者のメモとコミット ID は `rrd_versions` に残す。
+  - **再現**: `restoreDataset` が `SELECT … AS OF COMMIT '<id>'` で過去の版を別名で読み込み直す。
+  - 起動時に保存済みのデータセットを読み込む。`dropDataset` は保存分も消すが、過去の版は残る。
+  - 未設定・接続失敗のときは、これまでどおりメモリ上のみで動く(版管理のタブは表示しない)。
+- **aruaru-db の実バグ**(2026-09-24 発見): INSERT の解析(`aruaru-query/src/parser.rs` の `parse_insert`)が、
+  値の中の `,` `)` 引用符を区別しないため、CSV のような文字列を保存できない
+  (「INSERT: 3 columns but 5 values」)。realdata.pro は値を Base64 にして回避している。aruaru-db 側の修正は別作業として切り出した。
+- aruaru-db のパラメータは文字列として扱われるため、日時も TEXT で保存する(BIGINT の束縛は失敗した)。
+- **VPS の本番 aruaru-db は `ARUARU_USERS` が未設定で、誰も pgwire にログインできない状態**(2026-09-24 確認、
+  journal に警告が出ている)。本番 DB の認証を変えて再起動すると他のサイトにも影響するため、
+  **realdata.pro 専用の aruaru-db を別プロセス**で起動している(2026-09-24)。
+  - サービス: `realdata-aruaru-db.service`(`/root/aruaru-db/target/release/aruaru-server` を別のデータ・別のポートで起動)。
+    データは `/root/repository/realdata.pro/data/aruaru-db`、pgwire は `15433`、GraphQL は `14001`。
+  - 認証情報は VPS 上で生成し、root だけが読めるファイル(`.env.aruaru-db`・`.env.realdata`、権限 600、Git 管理外)にだけある。
+  - ポート 15433 / 14001 は `0.0.0.0` で待ち受けるが、ファイアウォール(firewalld)が遮断している(外部から届かないことを確認済み)。
+  - VPS で通しの確認済み: 保存 → 版の記録 → 変更 → 再度保存 → 過去の版の再現 → 削除。
+- ローカルの検証は、`aruaru-server --pg-port 15433 …` を `ARUARU_USERS=rrd:<検証用パスワード>` で起動し、
+  `RRD_TEST_DSN` を設定して `cargo test -p rrd-server store` を実行する(未設定なら省略される)。
+
+## 世界リサーチ(2026-09-24)
+
+テーマと国・地域(最大6)を選ぶだけで、各国の情報を集め、解析・分析し、提案まで出す(`research.rs`、GraphQL `research`)。
+AI は aruaru-llm の `complete-priority`(無料 AI を優先順・ハイブリッドで使う)を使う。
+
+1. テーマを各国の言語へ翻訳する(1言語につき検索語1つ)。
+2. 国ごとに、現地の地域・言語(`gl`/`hl`)で Web 検索する。aruaru-llm `/v1/search/raw` を使う。
+   国別の主要ニュース(aruaru-llm `/v1/news/for`)と、GitHub / YouTube も選べる。
+3. テーマの主要な語を含まない Web 結果を除き、集めた記事をデータセットにする。
+4. AI に JSON で分析させる(要約・トレンド・機会・リスク・提案・国別の論調)。
+   根拠は記事の番号で答えさせ、URL はサーバー側で付ける。存在しない番号は捨てる。
+5. 2つ目以降の言語は、文章だけを `@@n@@ 訳文` 形式で翻訳し、構造・数値・根拠はサーバー側で組み立てる。
+   翻訳に失敗したら、その言語で直接分析する。
+
+### 開発・テスト・デバッグの記録(実データ、VPS の aruaru-llm を使用)
+
+| 反復 | 見つかった問題 | 対応 |
+|---|---|---|
+| 1 | ドイツの結果が無関係(クラシファイド広告・薬局)。原因は、翻訳が「A, B, C」の複数案になり、検索エンジンが広く解釈したこと。データセット名が上書きされる。日本語に英単語が混ざる | 翻訳は検索語1つにし、カンマ以降は捨てる。データセット名に日時を付ける。AI に「指定言語のみ」と指示 |
+| 2 | 日本の Web 結果が「需要予測システム」など無関係(「需要」だけで一致)。国別ニュースは一般の見出しで、テーマの根拠に混ざる | 主要語による関連性フィルター(需要・市場などの一般語は除く)。ニュースを「背景情報」として別の節に分け、根拠にしないよう指示 |
+| 3 | 英語圏の複数国(米・印)で検索語が同じになり、重複排除でインドの結果が消えた | 同じ言語の国を複数選んだ場合は、検索語に国名を付ける |
+| 4 | 本文中の根拠番号が文字のままで、確かめにくい | `[n]` を記事へのリンクにする(要素を組み立てて表示し、http/https 以外はリンクにしない) |
+| 5–6 | ヒンディー語版が作れない(JSON 全体の翻訳→文字列配列の翻訳でも失敗し、直接分析の再試行で 176 秒かかった) | 引用符などで AI が JSON のエスケープを誤るのが原因と判断し、`@@n@@` 行形式+約 2,000 文字ごとの並行翻訳に変更。3 言語で 43 秒 |
+| 7 | グラフの国名・情報源が英語や内部値のまま | 日本語名で表示 |
+
+確認済みのテーマ: 「抹茶の海外需要」(日米独)、「電気自動車の充電インフラ」(日米英印・日英ヒンディー語)、
+「中小企業向けクラウド会計」(日中越米・GitHub/YouTube 付き・日越)。
+YouTube は VPS にキーが無いため、警告を出したうえで処理を続けることを確認した。
+
+## グラフ描画(P4、2026-09-24)
+
+- グラフは三角形メッシュにしてから描く(棒: 背景・目盛り線・軸・棒の四角形。円: 1度あたり1分割以上の扇形)。
+  縦横2倍で描いてから 2×2 平均で縮小し、ジャギーを抑える。文字(ラベル・凡例)は画像に含めず、画面側の HTML で出す。
+- **GPU**: open-directx `render_indexed_scene_with_depth_and_read_back`(Vulkan オフスクリーン)を使う。
+  シェーダーは open-directx 同梱の `triangle_vs/ps.dxbc` を `directx-shader-translate` で SPIR-V に変換して使う。
+  深度で「後に描いた三角形が手前」になるようにし、CPU 経路の後勝ちと同じ見え方にしている。
+- **CPU**: エッジ関数によるラスタライザ。スカラー版と SIMD 版で計算の順序と丸めを揃えている
+  (行定数 `B·y+C` を先に求め、FMA は使わない)。
+- 検証結果(2026-09-24):
+  - 開発機(Ryzen 9 3950X / GeForce GT 730): GPU と CPU の出力が**完全一致**(約28万画素中、差は0画素)。
+    AVX2 とスカラーの出力も画素単位で一致した。
+  - AVX-512 の経路は VPS(Xeon Icelake)で検証する(下の HANDOFF 参照)。
+- `RRD_SIMD=avx2|scalar` で下位の経路に固定できる(比較・切り分け用)。
+
+## API キーの共有(2026-09-24)
+
+検索(Google / YouTube / GitHub)と AI のキーは、**aruaru-llm の設定1か所を正本**とし、realdata.pro は
+キーを持たない(コピーしない)。realdata.pro は `RRD_ARUARU_LLM_URL` で aruaru-llm を呼ぶだけにする。
+
+- VPS では、open-english と realdata.pro が同じ aruaru-llm(`127.0.0.1:4600`)を使う。
+  キーは `/root/aruaru-llm/.env.google-search` などにある。
+  ここへキーを追加・変更すると、両方に自動で即時反映される(コピーしないので、片方だけ古いままになるずれも起きない)。
+- open-english の画面で利用者がブラウザに保存するキー(localStorage / vault)は、その利用者のブラウザにだけ存在する。
+  別オリジン(realdata.pro)からは読み取れないため、自動共有の対象外。
+- 2026-09-24 時点のローカル検証: 開発機のキー(`F:\API.txt`)では、Google Custom Search JSON API が
+  「このプロジェクトは API へのアクセス権がない」(HTTP 403)を返した。VPS の設定での動作確認は、デプロイ後に行う。
+
+## 保管庫の複数リポジトリ自動引っ越し(2026-09-28)
+
+GitHub は1リポジトリあたり10GBを推奨上限としている。`RRD_ARCHIVE_REPO` の1つのリポジトリに保存し
+続けるといずれ近づくため、あらかじめ余裕を持って次のリポジトリを用意しておき、現在のシャードが
+上限に近づいたら**自動的に新しいリポジトリへ書き込み先を切り替える**機能を実装した(`vault.rs`)。
+
+- **索引リポジトリ**(`RRD_CATALOG_REPO`)を設定すると有効になる(未設定なら、これまでどおり単一
+  リポジトリのみで動く=自動引っ越しはしない)。索引には `catalog.json`(シャードの一覧と、ファイルパス
+  →現在のシャードの対応表)だけを持ち、このファイル自体はシャード数・パス数に比例するだけで、
+  実データにつれて大きくなり続けることはない。
+- **容量の確認**: GitHub API(`GET /repos/{owner}/{repo}`)で現在のシャードのサイズ(バイト)を、
+  10分に1回だけ確認する(書き込みのたびに API を叩くと遅く・レート制限にも近づくため)。
+  しきい値は既定 **1GB**(2026-10-03に8GBから変更。GitHub の推奨は1リポジトリ1GB未満・ソフト上限5GBのため。
+  環境変数 `RRD_ARCHIVE_THRESHOLD_GB` で変更可)。作成からの平均増加ペースで、しきい値到達まで14日以内と
+  見込めたら**次のシャードを先行作成**する(書き込み先の切り替えはしきい値到達時)。
+- **引っ越し**: しきい値を超えたら、GitHub API(`POST /orgs/{owner}/repos` または `/user/repos`)で
+  `<プレフィックス>-<連番>`(例: `realdata-archive-2`)という名前の非公開リポジトリを自動作成し、
+  以後の書き込みはすべてそちらへ向ける。古いシャードは「封印済み(sealed)」として読み込み専用のまま
+  残る(過去データは移動しない。コピーコストが大きいため)。
+- **API トークン**: `RRD_GITHUB_TOKEN`(無ければ `GITHUB_TOKEN`)を使う。git 本体の push/pull 認証
+  (credential store)とは別に、容量確認・新規リポジトリ作成という API 呼び出し専用。未設定の場合は
+  容量確認・自動作成ができないため、警告を出したうえで現在のシャードのまま動き続ける(既存の動作から
+  後退はしない)。
+- **読み込み**: データセット・毎朝の自動収集・地図データ(osm)のいずれも、まず索引でシャードを
+  特定し、無ければ新しい順にシャードを探す。版の履歴(`git log`)・過去の版の読み出しも、複数シャード
+  にまたがる場合はすべてのシャードから集めて束ね直す。
+- 開発機での検証: 単体テスト(`vault::tests`・`github::tests`)と、既存の `archive`/`store` の
+  テストがすべて通ることを確認した(GitHub の実 API・実リポジトリ作成は未検証。トークンを用意した
+  うえで VPS でのデプロイ後に確認する)。
+- 未実施: 実際にしきい値へ到達させての引っ越しの実地検証(現在のシャードは約0.9MBで当面先になる見込み。
+  実地の通し検証は、使い捨てシャードで行う手順を下記「お引越しの手動確認手順」に記す)。
+
+### お引越しの手動確認手順(2026-10-14)
+
+1. `RRD_ARCHIVE_THRESHOLD_GB` を極小(例 `0.000001`)にした**検証用インスタンス**を、本番とは別の
+   `RRD_ARCHIVE_REPO`・`RRD_CATALOG_REPO`(使い捨ての非公開リポジトリ)で起動する(本番のシャードには書かない)。
+2. GraphQL `saveDataset` で数件保存 → 10分以内の容量確認で新シャード `<プレフィックス>-2` が自動作成され、
+   以後の書き込み先が切り替わることをログ(`保管庫 … が上限に近づきました`)と `catalog.json` で確認する。
+3. 旧シャードのデータが読めること(`datasets` 一覧・版の履歴)を確認する。
+4. 検証用リポジトリは確認後に削除する。
+
+### Automatic multi-repository failover for the archive (2026-09-28, English)
+
+GitHub recommends a 10GB-per-repository limit. Since everything was being written to the single
+`RRD_ARCHIVE_REPO`, that limit would eventually be approached. Implemented automatic rotation
+(`vault.rs`): when the current shard nears the limit, writes **automatically switch to a new repository**
+prepared in advance.
+
+- Enabled by setting a **catalog repository** (`RRD_CATALOG_REPO`); if unset, behavior is unchanged
+  (single repository, no rotation). The catalog holds only `catalog.json` (the list of shards and a
+  path → current-shard index), which stays small — it scales with the number of shards and paths, not
+  with the amount of data stored.
+- **Capacity check**: the current shard's size (bytes) is checked via the GitHub API
+  (`GET /repos/{owner}/{repo}`) at most once every 10 minutes (checking on every write would be slow and
+  approach rate limits). Default threshold is **1GB** (changed from 8GB on 2026-10-03, since GitHub recommends
+  under 1GB per repository with a 5GB soft limit; overridable via `RRD_ARCHIVE_THRESHOLD_GB`). If the average
+  growth rate since creation predicts reaching the threshold within 14 days, the **next shard is created
+  ahead of time** (the actual write switch still happens at the threshold).
+- **Rotation**: once the threshold is exceeded, a new private repository named `<prefix>-<n>` (e.g.
+  `realdata-archive-2`) is auto-created via the GitHub API (`POST /orgs/{owner}/repos` or `/user/repos`),
+  and all subsequent writes go there. The old shard is marked "sealed" and stays read-only (existing data
+  is never moved, since copying it would be expensive).
+- **API token**: uses `RRD_GITHUB_TOKEN` (or `GITHUB_TOKEN`), separate from git's own push/pull
+  credentials — used only for capacity checks and repo creation. If unset, a warning is logged and the
+  system keeps using the current shard (no regression from prior behavior).
+- **Reads**: datasets, daily automatic collection, and map data (osm) all first consult the catalog index
+  for the shard, falling back to searching shards newest-first. Version history (`git log`) and
+  historical reads are merged across shards when needed.
+- Verified on the dev machine: unit tests (`vault::tests`, `github::tests`) pass, and all existing
+  `archive`/`store` tests still pass (the real GitHub API / repo creation has not yet been exercised;
+  to be confirmed after deployment once a token is configured).
+- Not yet done: an actual end-to-end rotation at the threshold (the current shard is ~0.9MB, so this is far
+  off; see the manual verification procedure below, using throwaway shards).
+
+#### Manual rotation check procedure (2026-10-14, English)
+
+1. Start a **separate verification instance** with `RRD_ARCHIVE_THRESHOLD_GB` set tiny (e.g. `0.000001`) and
+   its own throwaway private `RRD_ARCHIVE_REPO` / `RRD_CATALOG_REPO` (never write to the production shard).
+2. Save a few datasets via GraphQL `saveDataset`; within one 10-minute capacity check the new shard
+   `<prefix>-2` should be auto-created and writes should switch, visible in the log and `catalog.json`.
+3. Confirm the old shard is still readable (dataset list, version history).
+4. Delete the throwaway repositories afterwards.
+
+## 毎朝の自動収集(aruaru-search)の試験結果(2026-09-26)
+
+- 試験収集の1か所目(岩手県)は、27件の検索で70件を収集できた(以前は同じ場所が0件で失敗していた)。
+- 拒否・検索語の一部しか反映されない Bing・Brave は1時間休止し、Yahoo! JAPAN・Daum・Baidu・Naver で収集できている。
+  自動収集は共有検索の枠(1日100回)を使わなくなった。
+- 3か所の試験収集のうち残り2か所は実行中。1か所約20分かかるため、日本全国48か所の既定は1日600件(約22か所)、
+  全国一巡に約2日の見込み。全体の成功率は未計測。
+- 試験用設定(強制実行・件数81・デバッグログ)は設定ファイルから除去済み。現在実行中の試験はそのまま完了させ、
+  次のVPS再起動では強制実行しない。
+- 課題: 日本語検索元が Bing・Brave・Yahoo! JAPAN の3つのみで、休止が重なると手薄になる。他の検索元は拒否か
+  結果形式が使えず、検索元を増やす取り組みが引き続き必要。翌朝、1日600件設定での自動収集成功を確認し報告する。
+
+### Daily automatic collection (aruaru-search) test results (2026-09-26, English)
+
+- The first test location (Iwate) collected 70 records from 27 searches (previously 0 records at the same
+  location).
+- Bing and Brave (rejected or only partially honoring the query) are suspended for 1 hour; Yahoo! JAPAN,
+  Daum, Baidu, and Naver are collecting successfully. Automatic collection no longer consumes the shared
+  search quota (100/day).
+- Of 3 test locations, 2 remain in progress. Each location takes ~20 minutes, so the daily default across
+  Japan's 48 locations is 600 searches (~22 locations/day), estimated at ~2 days for a full national pass.
+  Overall success rate not yet measured.
+- Test-only settings (forced run, count 81, debug logging) have been removed from the config; the
+  currently running test will finish as-is, and the next VPS restart will not force a run.
+- Remaining issue: only 3 Japanese-language sources (Bing, Brave, Yahoo! JAPAN) exist, so overlapping
+  suspensions thin coverage; other sources tried are either rejected or return unusable formats — adding
+  more sources remains necessary. Tomorrow morning we will confirm success under the 600/day setting.
+
+## 実装メモ
+
+- `Column` は型ごとの `Vec<Option<T>>`(int/float/bool/str)。`None` が欠損。
+- CSV の型推論は int → float → bool → str の順。欠損とみなす値: 空欄 / `NA` / `N/A` / `null` / `NULL` / `NaN`。
+  3桁区切りのカンマ(`8,021,407,192`)は数値として扱う(区切り位置が不正なものは文字列のまま)。
+- URL 取り込みの SSRF 対策: 許可するのは http/https のみ。名前解決したすべての IP を検査し、1つでも内部向けなら拒否する
+  (私設・ループバック・リンクローカル・CGNAT・NAT64 等)。接続は検証済みの IP へ固定する。
+  リダイレクトは手動で追い、1段ごとに再検証する(最大5回)。応答は 16MiB・20秒まで。
+- AI 説明に渡すのは、要約統計と、画面に出ている分析結果の文字だけ。生データは、利用者が選んだ場合に限り先頭10行を渡す。
+  AI の回答は、innerHTML を使わずに要素を組み立てて表示する(見出し・太字・箇条書きのみ対応)。
+- 数値列を平均値・中央値で補完すると float 列になる。フィルタでは欠損の行を常に除外する。
+- 重回帰: 説明変数と目的変数を平均で中心化した拡大行列 A について、AᵀA を open-cuda の `sgemm`(f32)で求める。
+  XᵀX と Xᵀy はそこから取り出し、部分ピボット付きガウス消去(f64)で解く。R² は元データから f64 で計算する。
+  2026-09-24 に厳密な有理数計算と照合し、係数の相対誤差は 2×10⁻⁵ 程度だった(f32 GEMM による)。
+- サーバーはリクエストボディの上限(`RRD_MAX_BODY`、既定 32MiB)を、読み込みの時点で適用する。
+  データセットは最大64個までとし、GraphQL には深さ・複雑度の上限を設けている。
+- 現在、データセットはメモリ上にのみ保持している(再起動で消える)。永続化は P2 の aruaru-db で行う。
+
+## 普及計画
+
+[docs/GO_TO_MARKET.md](docs/GO_TO_MARKET.md) を参照。
+
+## JSON処理の使用方針: `parse_secure_sonic`(速い型+安全)と`sonic-rs`は使える所では全て使う(2026-10-14、ユーザー指示)
+正本は[`RS-JSON`](https://github.com/aon-co-jp/RS-JSON)(`README.md`・`PORTING.md`)。
+
+**方針**: JSONを読む所は、使える所では**全て** `rust-json`(RS-JSON)の `parse_secure_sonic`(`fast`機能、結果は`sonic_rs::Value`)を使う。
+`sonic-rs` を直接使える所(型付き構造体への読み込みなど)も同様。使えない所は `parse_secure`(結果は`serde_json::Value`)を使う。
+外部から来る信頼できない入力(HTTP本文・ネットワーク越しのファイル・アップロード)は、**必ずサイズ・深さ・重複キーの上限つき**で読む。
+
+**実測(7 MB・4万件)**: `serde_json` 200 ms / `parse_secure` 217 ms / **`parse_secure_sonic` 83 ms(約2.4倍速い、防御込み)** / `sonic-rs`そのまま 33 ms(約6倍、防御なし)。
+`serde_json::Value`に読む限りSIMDでもほぼ速くならない(188 ms)。**速さの源は、結果を連続した領域に詰め込む値の型**。
+
+**使える所 / 使えない所**
+- ✅ 読み取り中心で、JSONを大きく・頻繁に読む所(キャッシュJSON、設定、APIの応答、ログ、インデックス)。
+- ✅ 外部からの入力の入口(速さより防御が目的。`parse_secure`でも可)。
+- ⚠️ `serde_json::Value`を関数間で受け渡している既存コードは、型を`sonic_rs::Value`に直す書き換えが要る(`JsonValueTrait`/`JsonContainerTrait`のメソッド)。書き換えずに`serde_json::Value`へ読むと速くならない。
+- ❌ WASM(`rust_json::light`、依存ゼロ)、PHP/JavaScript側のJSON処理(Rustの部品は使えない)。
+- 注意: 依存先の`sonic-rs`は内部で`unsafe`を使う(自前コードに`unsafe`は無い)。小さなJSON(数KB)では体感差が出ない。速度目的の書き換えは、実測で効く所から。
+
+**導入**: `Cargo.toml`に `rust-json = { path = "../RS-JSON", features = ["fast"] }`。使用例は`RS-JSON/README.md`。
+
+**このリポジトリでの適用状況**: 未適用(方針のみ)。コードの切り替えは、JSONを大きく・頻繁に読む所から実測して順に行う。
+
+## JSON handling policy: use `parse_secure_sonic` (fast type + secure) and `sonic-rs` everywhere they can be used (2026-10-14, user instruction)
+The source of truth is [`RS-JSON`](https://github.com/aon-co-jp/RS-JSON) (`README.md`, `PORTING.md`).
+
+**Policy**: wherever JSON is read, use `parse_secure_sonic` from `rust-json` (RS-JSON, the `fast` feature; the result is `sonic_rs::Value`) **everywhere it can be used**.
+Use `sonic-rs` directly where possible too (e.g. reading into typed structs). Where it cannot be used, use `parse_secure` (result: `serde_json::Value`).
+Untrusted input from outside (HTTP bodies, files over the network, uploads) **must always be read with size / depth / duplicate-key limits**.
+
+**Measured (7 MB, 40,000 records)**: `serde_json` 200 ms / `parse_secure` 217 ms / **`parse_secure_sonic` 83 ms (about 2.4x faster, with the defences)** / raw `sonic-rs` 33 ms (about 6x, no defences).
+Reading into `serde_json::Value` gives almost no speed-up even with SIMD (188 ms). **The speed comes from the value type that packs the result into contiguous memory.**
+
+**Where it can / cannot be used**
+- ✅ Read-heavy code that parses large or frequent JSON (cache JSON, config, API responses, logs, indexes).
+- ✅ Entrances for outside input (the goal there is defence rather than speed; `parse_secure` is fine).
+- ⚠️ Existing code that passes `serde_json::Value` between functions needs its type changed to `sonic_rs::Value` (methods from `JsonValueTrait` / `JsonContainerTrait`). Reading into `serde_json::Value` without that change is not faster.
+- ❌ WASM (`rust_json::light`, zero dependencies) and the JSON handling on the PHP / JavaScript side (Rust components cannot be used there).
+- Note: the `sonic-rs` dependency uses `unsafe` internally (our own code has none). For small JSON (a few KB) the difference is not noticeable; do speed-motivated rewrites where measurements show a benefit.
+
+**Adoption**: in `Cargo.toml`, `rust-json = { path = "../RS-JSON", features = ["fast"] }`. Example in `RS-JSON/README.md`.
+
+**Status in this repository**: Not yet applied (policy only). Code will be switched over place by place, starting where measurements show large or frequent JSON reads.
+
+## API 方針: REST 全廃・gRPC / Connect へ (2026-11-04)
+
+### 日本語
+- **REST は全廃する。新しい API は REST で作らない。** ブラウザや `curl` から呼ぶ API は **Connect の単純呼び出し**(`POST /<パッケージ>.<Service>/<Method>`、`content-type: application/json`、本文は JSON)、サービス間は **gRPC / gRPC-web**(RPoem の管理API `open_runo.admin.v1.Admin` と同じ流儀)。ストリーミングは、必要になってから。
+- **既存の REST は、触るときに順に移す。** 移したら旧 REST の経路は消す。移行が終わるまで残るが、**新規には追加しない**。
+- **JSON は RS-JSON に統一**する(読み込みは `from_str_secure` / `parse_secure` でサイズ・深さ・重複キーの上限つき、書き出しは `rust_json::fast`)。ブラウザの WASM に `prost` は入れない(サイズが増えるため)。
+- **例外(自分たちの API ではなく、相手の規格が決めているもの)**: ACME、OAuth/OIDC のコールバック、第三者(GitHub など)からの Webhook、ヘルスチェック、静的ファイル配信、OTLP など。これらは規格どおりの HTTP を受ける。
+- 参考実装: `RPoem`(`open_runo.admin.v1.Admin`)、`open-easy-web`(`server/src/connect.rs`、`proto/open_easy_web/admin/v1/admin.proto`)。
+- ※ このリポジトリのコードが既に方針どおりかどうかは、各リポジトリの現状による。この節は方針の記録であり、コードの変更を意味しない。
+
+### English
+- **REST is being abolished. New APIs are not built as REST.** APIs called from browsers or `curl` use **Connect unary calls** (`POST /<package>.<Service>/<Method>`, `content-type: application/json`, JSON body); service-to-service calls use **gRPC / gRPC-web** (the same style as RPoem's admin API `open_runo.admin.v1.Admin`). Streaming only when it is actually needed.
+- **Existing REST endpoints are migrated one by one, when they are touched.** The old REST route is removed once migrated. Until migration is finished they remain, but **no new ones are added**.
+- **JSON is unified on RS-JSON**: reading with `from_str_secure` / `parse_secure` (size, depth and duplicate-key limits), writing with `rust_json::fast`. `prost` is not put into browser WASM (it would grow the binary).
+- **Exceptions (shapes dictated by someone else's standard, not our own API)**: ACME, OAuth/OIDC callbacks, webhooks from third parties (e.g. GitHub), health checks, static file serving, OTLP, and so on. These accept plain HTTP as the standard requires.
+- Reference implementations: `RPoem` (`open_runo.admin.v1.Admin`) and `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
+- Note: whether the code in a given repository already follows this policy depends on that repository. This section records the policy; it does not mean the code has been changed.
+
+### Deutsch (KI-Übersetzung, redaktionell überarbeitet; noch nicht von Muttersprachlern geprüft)
+- **REST wird vollständig abgeschafft; neue APIs entstehen nicht mehr als REST.** APIs, die aus dem Browser oder per `curl` aufgerufen werden, verwenden **unäre Connect-Aufrufe** (`POST /<Paket>.<Service>/<Methode>`, `content-type: application/json`, JSON-Body). Zwischen Diensten kommen **gRPC bzw. gRPC-web** zum Einsatz, im selben Stil wie die Admin-API von RPoem (`open_runo.admin.v1.Admin`). Streaming wird erst ergänzt, wenn es tatsächlich gebraucht wird.
+- **Bestehende REST-Endpunkte werden schrittweise umgestellt, und zwar immer dann, wenn man ohnehin an ihnen arbeitet.** Sobald ein Endpunkt umgestellt ist, wird die alte REST-Route entfernt. Bis zum Abschluss der Migration bleiben die übrigen bestehen, es werden aber **keine neuen mehr hinzugefügt**.
+- **JSON wird einheitlich über RS-JSON verarbeitet**: Gelesen wird mit `from_str_secure` bzw. `parse_secure` (mit Obergrenzen für Größe, Verschachtelungstiefe und doppelte Schlüssel), geschrieben mit `rust_json::fast`. `prost` wird nicht in das Browser-WASM aufgenommen, da es die Datei vergrößern würde.
+- **Ausnahmen (Schnittstellen, deren Form ein fremder Standard vorgibt und die nicht zu unserer eigenen API gehören)**: ACME, OAuth/OIDC-Callbacks, Webhooks von Drittanbietern (z. B. GitHub), Health-Checks, die Auslieferung statischer Dateien, OTLP und Ähnliches. Diese nehmen, wie vom jeweiligen Standard verlangt, gewöhnliches HTTP entgegen.
+- Referenzimplementierungen: `RPoem` (`open_runo.admin.v1.Admin`) und `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
+- Hinweis: Ob der Code eines einzelnen Repositorys diese Richtlinie bereits erfüllt, hängt vom jeweiligen Repository ab. Dieser Abschnitt dokumentiert lediglich die Richtlinie; er besagt nicht, dass der Code schon angepasst wurde.
+
+### Русский (перевод выполнен с помощью ИИ и отредактирован; носителями языка пока не проверен)
+- **От REST мы полностью отказываемся; новые API больше не создаются в стиле REST.** API, к которым обращаются из браузера или через `curl`, используют **унарные вызовы Connect** (`POST /<пакет>.<Service>/<Method>`, `content-type: application/json`, тело запроса — JSON). Для взаимодействия между сервисами применяются **gRPC и gRPC-web** — в том же стиле, что и административный API RPoem (`open_runo.admin.v1.Admin`). Потоковая передача данных добавляется лишь тогда, когда в ней действительно возникает необходимость.
+- **Существующие REST-эндпоинты переводятся поэтапно — по мере того, как с ними приходится работать.** После перевода старый REST-маршрут удаляется. Пока миграция не завершена, оставшиеся эндпоинты сохраняются, но **новые не добавляются**.
+- **Работа с JSON унифицирована на основе RS-JSON**: чтение — через `from_str_secure` или `parse_secure` (с ограничениями на размер, глубину вложенности и повторяющиеся ключи), запись — через `rust_json::fast`. `prost` в браузерный WASM не включается, поскольку это увеличило бы размер файла.
+- **Исключения (интерфейсы, форму которых определяет чужой стандарт, а не наш собственный API)**: ACME, обратные вызовы OAuth/OIDC, вебхуки сторонних сервисов (например, GitHub), проверки работоспособности, раздача статических файлов, OTLP и тому подобное. Такие интерфейсы принимают обычный HTTP, как того требует соответствующий стандарт.
+- Эталонные реализации: `RPoem` (`open_runo.admin.v1.Admin`) и `open-easy-web` (`server/src/connect.rs`, `proto/open_easy_web/admin/v1/admin.proto`).
+- Примечание: соответствует ли код конкретного репозитория этой политике, зависит от самого репозитория. Данный раздел лишь фиксирует политику и не означает, что код уже изменён.
+
+## API 方針の補足: 用語の整理と使い分け (2026-11-04)
+
+### 日本語
+**1つに統一するものではなく、別の層の話です。** 「REST の代わり」になるのは Connect・gRPC・GraphQL だけで、WASM は画面を作る技術です。
+
+| 用語 | 何か | REST の代わりか |
+|---|---|---|
+| REST | URL と HTTP メソッドで操作を表す API の作り方 | 全廃する側 |
+| **Connect** | `POST /サービス名/メソッド名` に JSON を送る形式。`curl` でもブラウザの `fetch` でも呼べる | はい(**採用**) |
+| **gRPC** | 同じ「サービス/メソッド」の考え方を、バイナリ(protobuf)と HTTP/2 で行う形式。速く、ストリーミングも得意 | はい(**サービス同士に採用**) |
+| gRPC-web | gRPC のブラウザ向けの変形版 | はい(必要なら) |
+| GraphQL | 欲しい項目を問い合わせる形式 | 一部だけ(**問い合わせ(読み取り)専用**) |
+| WASM | Rust をブラウザの中で動かす仕組み | いいえ(画面を作る技術) |
+
+- **ブラウザの画面や `curl` から呼ぶ API は Connect**(POST、JSON を RS-JSON で読み書き)。ブラウザの WASM は素の gRPC を話せず、Connect なら `fetch` のままで、`prost` を足さずに済む(画面のサイズも増えない)。
+- **サービス同士の通信(サーバー間、重い処理、ストリーミング)は gRPC。** 多くは Connect で足りるので、ストリーミングが必要になった所だけ gRPC に上げる。
+- **GraphQL は、まとめて問い合わせたいときの読み取り専用。** 書き込み(操作)には使わない。
+- **WASM は画面を作る技術として、そのまま使う。** 画面から呼ぶ API が Connect になっただけ。
+- 外部の規格が形を決めるもの(ACME、OAuth のコールバック、第三者の Webhook、ヘルスチェック、静的ファイル、OTLP)は、規格どおりの HTTP のまま。
+- **迷ったら Connect。**
+
+### English
+**These are not alternatives to unify; they sit at different layers.** Only Connect, gRPC and GraphQL can replace REST; WASM is a way to build the UI.
+
+| Term | What it is | Replaces REST? |
+|---|---|---|
+| REST | API style that expresses operations through URLs and HTTP methods | The thing being abolished |
+| **Connect** | `POST /Service/Method` with a JSON body; callable from `curl` and from a browser `fetch` | Yes (**adopted**) |
+| **gRPC** | The same service/method idea over binary (protobuf) and HTTP/2; fast, good at streaming | Yes (**for service-to-service**) |
+| gRPC-web | A browser-friendly variant of gRPC | Yes (if needed) |
+| GraphQL | A query language: ask for exactly the fields you want | Partly (**read-only queries**) |
+| WASM | Runs Rust inside the browser | No (a UI technology) |
+
+- **APIs called from browser screens or `curl` use Connect** (POST, JSON read and written with RS-JSON). Browser WASM cannot speak plain gRPC; with Connect it stays a `fetch`, and `prost` is not needed (the binary does not grow).
+- **Service-to-service calls (server to server, heavy work, streaming) use gRPC.** Connect is enough in most places; move a call to gRPC only where streaming is actually needed.
+- **GraphQL is read-only**, for queries that gather several pieces of data. It is not used for writes (operations).
+- **WASM stays as the way to build the UI.** The API it calls simply became Connect.
+- Interfaces whose shape an outside standard dictates (ACME, OAuth callbacks, third-party webhooks, health checks, static files, OTLP) stay plain HTTP.
+- **When in doubt, use Connect.**
+
+### Deutsch (KI-Übersetzung, sprachlich überarbeitet; noch nicht von Muttersprachlern geprüft)
+**Es geht nicht darum, eine einzige Technik auszuwählen – die Begriffe liegen auf unterschiedlichen Ebenen.** Als Ersatz für REST kommen nur Connect, gRPC und GraphQL in Frage; WASM dagegen ist eine Technik, mit der die Benutzeroberfläche gebaut wird.
+
+| Begriff | Was ist das? | Ersatz für REST? |
+|---|---|---|
+| REST | Ein API-Stil, bei dem Operationen über URLs und HTTP-Methoden ausgedrückt werden | wird abgeschafft |
+| **Connect** | `POST /Dienst/Methode` mit JSON im Body; aufrufbar mit `curl` ebenso wie mit `fetch` im Browser | ja (**gewählt**) |
+| **gRPC** | Dasselbe Prinzip aus Dienst und Methode, aber über binäres protobuf und HTTP/2; schnell und gut für Streaming geeignet | ja (**zwischen Diensten**) |
+| gRPC-web | Eine für den Browser angepasste Variante von gRPC | ja (bei Bedarf) |
+| GraphQL | Abfragesprache, mit der man genau die benötigten Felder anfordert | teilweise (**nur für lesende Abfragen**) |
+| WASM | Führt Rust-Code direkt im Browser aus | nein (Technik für die Oberfläche) |
+
+- **APIs, die von Browseroberflächen oder per `curl` aufgerufen werden, verwenden Connect** (POST; JSON wird mit RS-JSON gelesen und geschrieben). WASM im Browser kann kein reines gRPC sprechen. Mit Connect bleibt es bei einem gewöhnlichen `fetch`, und `prost` ist nicht nötig – die WASM-Datei wird dadurch nicht größer.
+- **Für die Kommunikation zwischen Diensten (Server zu Server, rechenintensive Aufgaben, Streaming) wird gRPC eingesetzt.** In den meisten Fällen reicht Connect aus; auf gRPC wird nur dort umgestellt, wo Streaming tatsächlich gebraucht wird.
+- **GraphQL dient ausschließlich lesenden Abfragen**, wenn mehrere Informationen gebündelt abgefragt werden sollen. Für Schreibzugriffe (Operationen) wird es nicht verwendet.
+- **WASM bleibt die Technik für die Oberfläche.** Geändert hat sich lediglich, dass die aufgerufene API nun auf Connect beruht.
+- Schnittstellen, deren Form durch einen externen Standard festgelegt ist (ACME, OAuth-Callbacks, Webhooks von Drittanbietern, Health-Checks, statische Dateien, OTLP), bleiben gewöhnliches HTTP.
+- **Im Zweifel: Connect.**
+
+### Русский (перевод выполнен с помощью ИИ и литературно отредактирован; носителями языка пока не проверен)
+**Это не варианты, из которых нужно выбрать один, а технологии разных уровней.** Заменить REST могут только Connect, gRPC и GraphQL; WASM же — это способ создания пользовательского интерфейса.
+
+| Термин | Что это | Заменяет REST? |
+|---|---|---|
+| REST | Стиль построения API, при котором операции выражаются через URL и HTTP-методы | отменяется |
+| **Connect** | `POST /Сервис/Метод` с телом в формате JSON; вызывается как из `curl`, так и из браузерного `fetch` | да (**выбран**) |
+| **gRPC** | Тот же принцип «сервис — метод», но поверх двоичного формата protobuf и HTTP/2; работает быстро и хорошо подходит для потоковой передачи | да (**для связи между сервисами**) |
+| gRPC-web | Адаптированный для браузера вариант gRPC | да (при необходимости) |
+| GraphQL | Язык запросов: клиент запрашивает ровно те поля, которые ему нужны | частично (**только запросы на чтение**) |
+| WASM | Позволяет выполнять код на Rust прямо в браузере | нет (технология для интерфейса) |
+
+- **API, которые вызываются из браузерных интерфейсов или через `curl`, строятся на Connect** (POST; JSON читается и записывается через RS-JSON). Браузерный WASM не умеет работать с «чистым» gRPC. С Connect достаточно обычного `fetch`, а `prost` не требуется — размер WASM-файла не увеличивается.
+- **Для обмена между сервисами (сервер — сервер, ресурсоёмкие задачи, потоковая передача) применяется gRPC.** В большинстве случаев достаточно Connect; на gRPC переходят только там, где потоковая передача действительно необходима.
+- **GraphQL используется только для чтения**, когда нужно получить сразу несколько связанных данных. Для записи (операций) он не применяется.
+- **WASM по-прежнему остаётся технологией для интерфейса.** Изменилось лишь то, что вызываемый им API теперь построен на Connect.
+- Интерфейсы, форма которых задана внешним стандартом (ACME, обратные вызовы OAuth, вебхуки сторонних сервисов, проверки работоспособности, статические файлы, OTLP), остаются обычным HTTP.
+- **Если есть сомнения — выбирайте Connect.**
+
+## 2026-11-04 依存更新 / Dependency update
+- base64 0.22→0.23（rrd-server）。ビルド・テスト成功。`.deps/`配下の他リポジトリ由来の遅れと、修正版の無いrsa（RUSTSEC-2023-0071）は各リポジトリ側の対応待ち。
+- base64 0.22→0.23 (rrd-server). Build and tests pass. Gaps inside `.deps/` and rsa (RUSTSEC-2023-0071, no fix) belong to the upstream repos.
+
+## aruaru-llm 呼び出しの Connect 化 (2026-11-05)
+
+- aruaru-llm の REST 全廃に伴い、本リポジトリの呼び出し先を `POST /aruaru_llm.v1.Llm/<Method>`(JSON本文)へ変更した(旧 `/v1/...` は aruaru-llm 側で削除済み)。
+- 対象は aruaru-llm を呼ぶ箇所のみ。本リポジトリ自身のAPI・他サービス(aruaru-search 等)の呼び出しは別途。
+- 未検証: ビルド/実サーバー往復(aruaru-llm の `connect-migration` ブランチが VPS 未反映のため)。aruaru-llm の main マージ・VPS反映と同時に反映すること。
+
+## お引越しの実地確認結果(2026-11-08)/ Live rotation check result
+
+- 日本語: 使い捨てリポジトリ(しきい値 約1KB、本番とは別ポート・別データ)で実地確認した。容量超過を検知して `…-archive-2` を自動作成し書き込み先を切替、旧シャードは sealed(読み込み専用)になり、さらに `…-archive-3` へも連鎖して引っ越した。`catalog.json` の索引は各ファイルを正しいシャードへ指す。23か所の毎朝収集も途切れず保存された。検証用の実体(systemd 一時ユニット・/tmp のトークン入りファイル)は削除、使い捨てリポジトリ3件はアーカイブ済み(削除は所有者が行う)。
+- English: Verified live with throwaway repos (threshold ~1 KB, separate port and data). On exceeding the threshold the server auto-created `…-archive-2`, switched writes, sealed the old shard read-only, and chained again to `…-archive-3`. The `catalog.json` index points each file to the right shard, and the 23-place daily crawl was saved without interruption. Test unit and token-bearing files were removed; the three throwaway repos are archived (deletion is left to the owner).
+
+## 別アカウントでの再開(2026-11-17更新)/ Resuming on another account
+
+- 日本語: **再開するリポジトリは `realdata.pro`(手元`F:ealdata.pro`、VPSは`ssh conoha`の`/root/repository/realdata.pro`、サービス`realdata-pro.service`)**。関連は`aruaru-search`・`aruaru-llm`・`RPoem`・`open-web-server`、メタ索引は`F:uno`。そのまま貼り付ける再開用メッセージ(確認済み・未了・落とし穴)は[`CLAUDE.md`](CLAUDE.md)の「🛑 再開用メッセージ(別アカウントで再開用、2026-11-17更新)」。要点: 毎朝収集は11/16・11/17とも23か所成功、使い捨てリポジトリ4件は削除済み、「4層4重」の記録は完了(本節末の同名節)、本番の保管庫は約4.4MBで引っ越しはまだ先。**未了は、日次保存に独立監査ログ等を足すか(未実装)の設計判断だけで、着手前にユーザーへ確認する**。
+- English: **Repository to resume: `realdata.pro`** (local `F:ealdata.pro`; VPS `/root/repository/realdata.pro` via `ssh conoha`; service `realdata-pro.service`). Related: `aruaru-search`, `aruaru-llm`, `RPoem`, `open-web-server`; the meta index is `F:uno`. The paste-ready resume message (verified, open, pitfalls) is in [`CLAUDE.md`](CLAUDE.md), section "🛑 再開用メッセージ(別アカウントで再開用、2026-11-17更新)". Summary: the daily crawl succeeded for all 23 places on 11/16 and 11/17, the four throwaway repos are deleted, the "4-layer, 4-fold" documentation is done (same-named section below), and the production vault is ~4.4 MB, so rotation is far off. **The only open item is the design decision whether to add an independent audit log etc. to the daily saves (not implemented); ask the user before starting.**
+
+## open-web-server ⇔ RPoem の「4層4重」通信・DB連携(2026-11-17 調査・確認、日英)/ "4-layer, 4-fold" communication and DB integration
+
+### 日本語
+
+**役割**: `open-web-server` = Apache(+Nginx)相当の前面Webサーバー、`RPoem` = Tomcat相当のアプリケーションサーバー。一般的な「Apache→Tomcat→DB」の3層構成(Apacheが静的配信と負荷分散、Tomcatがアプリ、DBが永続化。[Web Application Clusters](https://mockflow.com/examples/web-application-cluster-architecture-diagram-using-ideaboard/)、[Atlassian: Apache と Tomcat の接続](https://ja.confluence.atlassian.com/x/p4nOD))を土台にしつつ、本プロジェクトの「4層4重」は**独自の目標アーキテクチャ**で、定義の正本は[`open-web-server/CLAUDE.md`](https://github.com/aon-co-jp/open-web-server)「拡張要件(2026-07-11)」節(出典つき、日英Web検索で裏取り済み)。ここへ要約する。
+
+**4層(設計の4本柱)**
+1. **VersionLess API × バージョン管理のハイブリッド**: APIはバージョンレス、データは `aruaru-db`(Git-on-SQL)でコミット単位に版管理。
+2. **Git管理 + ディスク冗長化**: 全変更をコミットで記録し、`open-raid-z`(ZFS類似の冗長化)を永続化層に。Gitの履歴とは独立に、ファイルシステムのスナップショットが別系統の復元手段になる。
+3. **通信層の四重化**: ①TCP-IP(権威パス)②UDP-IP(即時通知)③QUIC(MPQUICは範囲外)④MPTCP/SCTP(カーネル実装が使えない環境ではユーザー空間の`aggligator`で代替。実金融機関の物理経路冗長化はSD-WANが主流で、これは**次善策**と明記済み)。`open-web-server-wire`。
+4. **DB書き込みの四重化**: ①PostgreSQL ②aruaru-db ③マルチリージョン同期レプリケーション ④独立した監査用トランザクションログ(①〜③の複製ではなく、突き合わせ用の独立した検証手段)。`open-web-server-ledger`。
+
+別軸として、`open-web-server-wire` の**4層防御通信**(TLS 1.3 → 相互認証 → AEAD暗号化 → seq/timestampリプレイ対策)がある。これは伝送路の冗長化(上の3)とは別のセキュリティ層。
+
+**通信とDBの接続点(経路)**: クライアント → `open-web-server`(wire) → `Ledger`(冪等WAL+3ホップコミット+独立監査ログ) → RPoemゲートウェイ(`open-runo-gateway`、VPSでは127.0.0.1:8140) の Connect `Admin/DbMutate`(`x-api-key`必須。環境変数 `OPEN_RUNO_API_KEY`) → `aruaru-db`。`db_commit_id`をクライアントへ返し、同じキーの再送は同一の受領票(冪等)。
+
+**確認できた現状(2026-11-17)**
+- 実装・検証済み: Ledgerの冪等WAL・監査ログ・マルチリージョン複製(実SQLite2リージョン)・PostgreSQL WAL(WSL2のライブPostgreSQLで検証)、wireのTCP/UDP/QUIC(単一経路)と、ユーザー空間の多経路集約。VPSでは、LedgerとRPoemゲートウェイの配線(11-14)と、VPS上での同形のDbMutate実送信(`db_commit_id`返却・同キー再送で同一受領票)を確認済み。
+- 未了: 実際のLedger書き込みの本番通し、(1)の読み出し側(commit_id指定の過去状態照会API)、MPQUIC、カーネルMPTCP/SCTP、RPoemゲートウェイのHTTP/2(前面はHTTP/1.1のみ)。
+- **`realdata.pro` との関係(正直な現状)**: `rrd-server`(127.0.0.1:4701)は**この4層4重の書き込み経路(Ledger→DbMutate)を使っていない**。収集データはGitHubの非公開保管庫(複数シャード+`catalog.json`)へ保存し、`realdata-aruaru-db`(専用プロセス、版管理用)も別に持つ。つまり realdata.pro は上記のうち「前面(open-web-server)の背後で動く1アプリ」にすぎず、4重の書き込みを受ける対象には**まだなっていない**。
+
+**今後(未実装・要判断)**: realdata.pro の日次保存に、④独立監査ログ(保存名・サイズ・SHA-256・時刻を追記専用ファイルへ)を足すのが、最小で実害のない第一歩。①〜③(PostgreSQL・Ledger経由のaruaru-db・マルチリージョン)をどこまで適用するかは設計判断が要る。
+
+出典: [open-web-server/CLAUDE.md](https://github.com/aon-co-jp/open-web-server)、[CMT-SCTP and MPTCP](https://www.mdpi.com/2079-9292/11/15/2384)、[Multipath QUIC (CoNEXT 2017)](https://dl.acm.org/doi/10.1145/3143361.3143370)、[Cisco: SD-WAN for Financial Services](https://www.cisco.com/c/dam/m/en_us/solutions/industries/financial-services/new-financial-services-landscape-of-networking/SD-WAN-for-Financial-Services.pdf)、[Azure: Designing for redundancy](https://learn.microsoft.com/en-us/azure/well-architected/reliability/redundancy)、[PostgreSQL on ZFS](https://sumguy.com/postgresql-on-zfs-tuning-snapshots/)。2026-11-17の再検索では、「独立した監査ログを主DBと別に持つ」設計そのものを裏づける独立した資料は見つからなかった(ベンダー資料のみ)。この点は設計上の判断であり、外部の標準ではない。
+
+### English
+
+**Roles**: `open-web-server` = the front web server (Apache/Nginx-like), `RPoem` = the application server (Tomcat-like). The common "Apache → Tomcat → DB" 3-tier layout (Apache serves static files and balances load, Tomcat runs the app, the DB persists; see [Web Application Clusters](https://mockflow.com/examples/web-application-cluster-architecture-diagram-using-ideaboard/) and [Atlassian: connecting Apache to Tomcat](https://ja.confluence.atlassian.com/x/p4nOD)) is the base. This project's "4-layer, 4-fold" is **its own target architecture**; the source of truth is the "Extended requirements (2026-07-11)" section of [`open-web-server/CLAUDE.md`](https://github.com/aon-co-jp/open-web-server) (cited, verified by Japanese and English web searches). Summary:
+
+**The four layers**
+1. **VersionLess API × version control hybrid**: the API is versionless; data is versioned per commit in `aruaru-db` (Git-on-SQL).
+2. **Git + disk redundancy**: every change is a commit; `open-raid-z` (ZFS-like redundancy) is the persistence layer, and filesystem snapshots give a second, independent restore path besides Git history.
+3. **Four-fold transport**: (1) TCP-IP (authoritative path), (2) UDP-IP (instant notification), (3) QUIC (MPQUIC out of scope), (4) MPTCP/SCTP (where kernel support is unavailable, the user-space `aggligator` is used; real financial institutions mostly use SD-WAN for path redundancy, so this is documented as a **second-best substitute**). Crate: `open-web-server-wire`.
+4. **Four-fold DB writes**: (1) PostgreSQL, (2) aruaru-db, (3) multi-region synchronous replication, (4) an independent audit transaction log (not a copy of 1–3 but an independent means of cross-checking). Crate: `open-web-server-ledger`.
+
+A separate axis: the **4-layer defensive channel** in `open-web-server-wire` (TLS 1.3 → mutual auth → AEAD encryption → seq/timestamp replay protection). It is a security layer, distinct from the transport redundancy in item 3.
+
+**Where communication meets the DB**: client → `open-web-server` (wire) → `Ledger` (idempotent WAL + 3-hop commit + independent audit log) → the RPoem gateway (`open-runo-gateway`, 127.0.0.1:8140 on the VPS) via Connect `Admin/DbMutate` (`x-api-key` required; env `OPEN_RUNO_API_KEY`) → `aruaru-db`. The `db_commit_id` is returned to the client, and a resend with the same key returns the same receipt (idempotent).
+
+**Verified status (2026-11-17)**
+- Implemented and tested: Ledger idempotent WAL, audit log, multi-region replication (two real SQLite regions), PostgreSQL WAL (against a live PostgreSQL in WSL2); wire TCP/UDP/QUIC (single path) and user-space multipath aggregation. On the VPS: the Ledger→RPoem gateway wiring (11-14) and a real DbMutate send of the same shape as the Ledger's (returns `db_commit_id`; a resend returns the same receipt).
+- Open: a real production Ledger write end to end, the read side of layer 1 (query past state by `commit_id`), MPQUIC, kernel MPTCP/SCTP, HTTP/2 on the RPoem gateway (the front is HTTP/1.1 only).
+- **Relation to `realdata.pro` (honest status)**: `rrd-server` (127.0.0.1:4701) **does not use this 4-layer, 4-fold write path (Ledger → DbMutate)**. It stores collected data in private GitHub vault repositories (several shards plus `catalog.json`) and has its own `realdata-aruaru-db` process (for versioning). So realdata.pro is just one application running behind the front server; it is **not yet** a target of the four-fold writes.
+
+**Next (not implemented, needs a decision)**: the smallest harmless first step is a fourth-leg independent audit log for realdata.pro's daily saves (name, size, SHA-256 and time appended to an append-only file). How far to apply (1)–(3) (PostgreSQL, aruaru-db via the Ledger, multi-region) is a design decision.
+
+A fresh search on 2026-11-17 found no independent source supporting the specific idea of keeping an audit log independent of the primary DB (vendor material only). That is a design choice of this project, not an external standard.
+
+
+
+## 2026-11-19 別アカウントでの再開用メモ(実測の到達点と再開用メッセージ) / Resume memo for another account
+
+### 日本語
+**リポジトリ**: [`aon-co-jp/realdata.pro`](https://github.com/aon-co-jp/realdata.pro)(`F:\realdata.pro`、公開 https://realdata.pro/)。関連: [`aruaru-search`](https://github.com/aon-co-jp/aruaru-search)(無料メタ検索)、`aruaru-llm`、非公開の保存先 `aon-co-jp/realdata-archive`(と`realdata-catalog`)。
+**今回の到達点(`892e8e2`、push済み・VPS反映済み)**: 画面の「検索と毎朝の自動収集の状態」パネルの「直近の自動収集」が、サーバーを再起動しても消えないようにした。メモリに結果が無いとき、読み込み済みの保存分(`daily_jp_YYYYMMDD`)から復元する(成功・失敗の数は保存していないので0とし、保存先欄に「再起動前の記録。成功・失敗の数は不明」と出る)。`cargo test -p rrd-server crawl` 4件成功。本番は11/18 8:09から修正入りで稼働中、`crawlStatus` は 11/19 の `23か所成功・1か所失敗・保存先GitHub` を返すのを実測。
+**毎朝の自動収集の実測(VPSログ)**: 11/14=23成功0失敗、11/15=22成功1失敗、11/17=23成功0失敗、11/18=23成功0失敗、11/19=23成功1失敗。失敗が出ても1か所で、「4か所続けて使えなかったときだけ打ち切る」修正(`MAX_UNAVAILABLE_STREAK`)が効いている。1失敗の原因は未調査。aruaru-search側の記録に残る失敗はBaiduの「取得できず」(ボット検知=回避しない方針で休止)。
+**ドメイン**: `realdatapro.tokyo` は存在しない(DNSに無い)。公開名は `realdata.pro`。別ドメインを使うなら本人が正しい名前を決めてから設定する。
+**未了**: (1)11/15・11/19の1失敗の原因調査(検索元の休止か、地域ごとの結果ゼロか)、(2)数日分の結果を見た検索元ごとの失敗傾向の分析、(3)Naver/Baiduの品質調整、(4)ja/en/zh以外の言語のリサーチ、(5)各社の無料枠を毎朝確認する機能(依頼済み・未着手)、(6)aruaru-searchの公開ドメイン(未決・既定は公開しない)。
+**注意**: `cargo fmt --all` は使わない(兄弟リポジトリまで整形される。`cargo fmt-own`/`lint-own`/`test-own`)。ローカルで`cargo`を動かす前に`scripts\fetch-deps.ps1`で`.deps/`を取得する(`deps.lock`で固定)。PowerShellでは`$env:PATH="$env:USERPROFILE\.cargo\bin;$env:PATH"`が必要。トークンは`F:\git.txt`等のtxt経由で、値は表示・コミットしない。VPS反映は `ssh conoha` → `/root/repository/realdata.pro` で `git pull --ff-only` → `cargo build --release -j 2 -p rrd-server` → **自動収集が走っていない時間に**(毎朝7時開始で約3.5時間)`systemctl restart realdata-pro`。
+**再開用メッセージ(別アカウントでそのまま貼り付け)**: 「`aon-co-jp/realdata.pro`(`F:\realdata.pro`)の続きです。`PORTING.md` 末尾の『2026-11-19 別アカウントでの再開用メモ』を読んでから再開してください。直近の自動収集の復元(`892e8e2`)は本番反映済みです。次は、(1)11/15・11/19の自動収集で1か所失敗した原因の調査、(2)数日分の結果から検索元ごとの失敗の傾向の分析、(3)ドメインは `realdata.pro` のまま(別名にするなら先に確認)。返答は日本語のみ、REST は作らず Connect のみ、秘密は表示せず、完了報告の前に本番で確認、pushやVPS再起動は確認してから(自動収集の実行中は再起動しない)。」
+
+### English
+**Repositories**: [`aon-co-jp/realdata.pro`](https://github.com/aon-co-jp/realdata.pro) (`F:\realdata.pro`, public https://realdata.pro/). Related: [`aruaru-search`](https://github.com/aon-co-jp/aruaru-search) (free meta search), `aruaru-llm`, and the private stores `aon-co-jp/realdata-archive` (and `realdata-catalog`).
+**Reached this time (`892e8e2`, pushed and deployed)**: the "last daily crawl" in the "search and daily crawl status" panel no longer disappears when the server restarts. When memory has no result, it is restored from the already loaded saved data (`daily_jp_YYYYMMDD`); the success/failure counts are not stored, so they show 0 and the storage column reads "record from before restart; success/failure counts unknown". `cargo test -p rrd-server crawl` passes (4 tests). Production has run the fixed build since 11-18 08:09, and `crawlStatus` was measured returning 11-19: 23 succeeded, 1 failed, saved to GitHub.
+**Measured daily crawls (VPS log)**: 11-14 = 23 ok / 0 failed, 11-15 = 22 / 1, 11-17 = 23 / 0, 11-18 = 23 / 0, 11-19 = 23 / 1. Even when a failure occurs it is one place, so the "stop only after 4 consecutive unavailable" fix (`MAX_UNAVAILABLE_STREAK`) works. The cause of the single failures is not yet investigated. The only failure recorded on the aruaru-search side is Baidu "could not fetch" (bot detection; by policy we do not bypass it and let it rest).
+**Domain**: `realdatapro.tokyo` does not exist (no DNS record). The public name is `realdata.pro`. If another domain is wanted, the owner must decide the real name first.
+**Open**: (1) find the cause of the one failure on 11-15 and 11-19 (a resting search source, or zero results for a region), (2) analyse failure trends per search source over several days, (3) tune Naver/Baidu quality, (4) research in languages other than ja/en/zh, (5) the requested daily check of each provider's free tier (not started), (6) a public domain for aruaru-search (undecided; the default is not to publish).
+**Cautions**: never run `cargo fmt --all` (it formats sibling repositories; use `cargo fmt-own`/`lint-own`/`test-own`). Before running `cargo` locally, fetch `.deps/` with `scripts\fetch-deps.ps1` (pinned by `deps.lock`). In PowerShell set `$env:PATH="$env:USERPROFILE\.cargo\bin;$env:PATH"`. Tokens go through txt files such as `F:\git.txt`; never print or commit values. VPS deploy: `ssh conoha` → in `/root/repository/realdata.pro` run `git pull --ff-only` → `cargo build --release -j 2 -p rrd-server` → `systemctl restart realdata-pro` **only when no daily crawl is running** (it starts at 07:00 and takes about 3.5 hours).
+**Resume message (paste as is on the other account)**: "Continuing `aon-co-jp/realdata.pro` (`F:\realdata.pro`). Read 'Resume memo for another account (2026-11-19)' at the end of `PORTING.md` first. Restoring the last daily crawl after restarts (`892e8e2`) is deployed to production. Next: (1) investigate why one place failed in the 11-15 and 11-19 crawls, (2) analyse per-source failure trends over several days, (3) keep the domain `realdata.pro` (ask before choosing another). Reply in Japanese only, build no REST (Connect only), never print secrets, verify in production before reporting done, confirm before pushing or restarting the VPS (never restart while a daily crawl is running)."

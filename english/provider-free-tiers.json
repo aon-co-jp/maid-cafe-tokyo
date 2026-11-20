@@ -1,0 +1,52 @@
+{
+  "_comment_ja": "各AIプロバイダの無料枠情報。自動取得ではなく、開発者が定期メンテナンス時に手動で公式ドキュメント/信頼できる情報源を確認して更新する運用です(cron等による自動スクレイピングは行っていません)。各社の無料枠は変更されやすいため、最新の正確な情報は必ず各社公式サイトでご確認ください。",
+  "_comment_en": "Free-tier information for each AI provider. This file is NOT auto-scraped in real time — it is manually updated by the developer during periodic maintenance, based on official docs/reliable sources at the time. Free tiers change frequently; always check each provider's official site for the current, authoritative details.",
+  "last_updated": "2026-08-19",
+  "providers": [
+    {
+      "id": "google-search",
+      "name_ja": "Google検索(Custom Search JSON API)",
+      "name_en": "Google Search (Custom Search JSON API)",
+      "free_tier_ja": "1日100クエリまで無料(追加は1000クエリあたり$5、1日上限1万クエリ)。※このAPIは新規顧客への提供を終了しており、既存利用者も2027-01-01までに代替手段への移行が必要とGoogleが案内。",
+      "free_tier_en": "100 free queries/day (additional queries $5 per 1000, hard cap 10,000/day). Note: closed to new customers; Google has told existing users to migrate to an alternative by 2027-01-01.",
+      "source_url": "https://developers.google.com/custom-search/v1/overview",
+      "confidence": "researched"
+    },
+    {
+      "id": "deepseek",
+      "name_ja": "DeepSeek API",
+      "name_en": "DeepSeek API",
+      "free_tier_ja": "新規アカウント登録時に500万トークンを1回限り無料付与(クレカ不要、30日間有効)。常時無料のモデルは無い(消費後は従量課金、2026-08-16よりピーク/オフピーク別料金制)。",
+      "free_tier_en": "One-time 5-million-token grant for new accounts (no credit card, valid 30 days). No perpetually free model — after the grant, usage-based billing applies (peak/off-peak pricing since 2026-08-16).",
+      "source_url": "https://deepseek.ai/pricing",
+      "confidence": "researched"
+    },
+    {
+      "id": "chatgpt",
+      "name_ja": "ChatGPT (OpenAI API)",
+      "name_en": "ChatGPT (OpenAI API)",
+      "free_tier_ja": "新規登録時の自動無料クレジットは2025年半ばに廃止。現在は新規APIアカウントにクレカ不要で$5分のクレジット(3か月で失効)。クレジット無しの場合はGPT-3.5 Turbo限定・3リクエスト/分のみ。データ共有オプトイン時はGPT-5系で最大1日100万トークンの無料枠あり。",
+      "free_tier_en": "Automatic signup credits were discontinued mid-2025. New API accounts currently get $5 in free credits (no card, expires in 3 months). Without credits, free access is limited to GPT-3.5 Turbo at 3 requests/minute. Opting into data-sharing can unlock up to ~1M free tokens/day on GPT-5-family models.",
+      "source_url": "https://platform.openai.com/docs/pricing",
+      "confidence": "researched"
+    },
+    {
+      "id": "gemini",
+      "name_ja": "Google Gemini API",
+      "name_en": "Google Gemini API",
+      "free_tier_ja": "クレカ不要。モデルにより異なる(例: Gemini 2.5 Pro=5RPM/1日100件、2.5 Flash=10RPM/1日250件、2.5 Flash-Lite=15RPM/1日1000件)、共通で25万TPM。2025年12月にクォータが引き下げられた経緯あり。無料枠利用時はプロンプト/応答がGoogleの製品改善に利用され得る点に注意。",
+      "free_tier_en": "No credit card required. Limits vary by model (e.g. Gemini 2.5 Pro: 5 RPM / 100 requests per day; 2.5 Flash: 10 RPM / 250 per day; 2.5 Flash-Lite: 15 RPM / 1,000 per day), all sharing a 250K TPM cap. Quotas were reduced in December 2025. On the free tier, prompts/responses may be used to improve Google's products.",
+      "source_url": "https://ai.google.dev/gemini-api/docs/rate-limits",
+      "confidence": "researched"
+    },
+    {
+      "id": "claude",
+      "name_ja": "Claude API (Anthropic)",
+      "name_en": "Claude API (Anthropic)",
+      "free_tier_ja": "恒常的な無料枠は基本的に無い有料APIです。新規登録時にごく少額のクレジット(数ドル程度、期限付き)が付与される場合がありますが、金額・有無は変更されることがあるため保証はできません。継続利用にはクレカ登録・従量課金が前提です。",
+      "free_tier_en": "This is a paid API with no ongoing free tier. New accounts may receive a small, time-limited signup credit (on the order of a few dollars), but the amount/availability can change and is not guaranteed. Continued use requires a credit card on file and usage-based billing.",
+      "source_url": "https://www.anthropic.com/pricing",
+      "confidence": "researched"
+    }
+  ]
+}

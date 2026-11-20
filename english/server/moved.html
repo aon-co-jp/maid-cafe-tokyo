@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>maid-cafe.tokyo</title>
+<style>
+  :root { --bg:#fff7fa; --fg:#2b2030; --accent:#c2185b; --card:#ffffff; --line:#f1d3df; --muted:#7a6a78; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1d1520; --fg:#f4e9f1; --accent:#ff7eb3; --card:#2a1f2e; --line:#463349; --muted:#b9a7b6; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans", "Noto Sans JP", sans-serif; line-height:1.7; }
+  main { max-width: 760px; margin: 0 auto; padding: 32px 16px 56px; }
+  h1 { font-size: 1.5rem; margin: 0 0 8px; }
+  .lead { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:20px; margin:16px 0; }
+  .lead p { margin:0 0 14px; font-size:1.1rem; }
+  a.go { display:inline-block; background:var(--accent); color:#fff; text-decoration:none; padding:12px 22px; border-radius:999px; font-weight:700; }
+  a.go:focus-visible, button:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  .tag { color:var(--muted); font-size:.9rem; }
+  details { margin-top:24px; }
+  summary { cursor:pointer; color:var(--accent); font-weight:700; }
+  ul { list-style:none; padding:0; margin:12px 0 0; display:grid; grid-template-columns: 1fr; gap:8px; }
+  li { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:10px 14px; }
+  li b { display:block; font-size:.85rem; color:var(--muted); }
+  .note { margin-top:28px; font-size:.85rem; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="title">maid-cafe.tokyo</h1>
+  <p class="tag" id="langname"></p>
+  <div class="lead" id="lead"><p id="msg"></p><a class="go" id="go" href="https://maid-cafe.tokyo/">https://maid-cafe.tokyo/</a></div>
+  <details open>
+    <summary id="all">All languages</summary>
+    <ul id="list"></ul>
+  </details>
+  <p class="note">English / 日本語: This notice is machine-translated; please report mistakes. / この案内は機械翻訳を含みます。誤りがあればお知らせください。</p>
+</main>
+<script>
+// [コード, 自言語名, 文(「realdata.pro/english/ / realdata.pro/ は maid-cafe.tokyo に引っ越しました。新しいサイトをご利用ください。」)]
+var L = [
+ ["ja","日本語","「realdata.pro/english/」「realdata.pro/」は maid-cafe.tokyo に引っ越しました。新しいサイトをご利用ください。"],
+ ["en","English","“realdata.pro/english/” and “realdata.pro/” have moved to maid-cafe.tokyo. Please visit the new site."],
+ ["zh-CN","简体中文","“realdata.pro/english/”和“realdata.pro/”已迁移到 maid-cafe.tokyo，请访问新网站。"],
+ ["zh-TW","繁體中文","「realdata.pro/english/」與「realdata.pro/」已搬遷至 maid-cafe.tokyo，請前往新網站。"],
+ ["ko","한국어","'realdata.pro/english/'와 'realdata.pro/'는 maid-cafe.tokyo로 이전했습니다. 새 사이트를 이용해 주세요."],
+ ["es","Español","«realdata.pro/english/» y «realdata.pro/» se han mudado a maid-cafe.tokyo. Visite el nuevo sitio."],
+ ["fr","Français","« realdata.pro/english/ » et « realdata.pro/ » ont déménagé sur maid-cafe.tokyo. Merci de visiter le nouveau site."],
+ ["de","Deutsch","„realdata.pro/english/“ und „realdata.pro/“ sind zu maid-cafe.tokyo umgezogen. Bitte besuchen Sie die neue Seite."],
+ ["it","Italiano","«realdata.pro/english/» e «realdata.pro/» si sono trasferiti su maid-cafe.tokyo. Visita il nuovo sito."],
+ ["pt","Português","“realdata.pro/english/” e “realdata.pro/” mudaram para maid-cafe.tokyo. Visite o novo site."],
+ ["ru","Русский","«realdata.pro/english/» и «realdata.pro/» переехали на maid-cafe.tokyo. Пожалуйста, посетите новый сайт."],
+ ["uk","Українська","«realdata.pro/english/» і «realdata.pro/» переїхали на maid-cafe.tokyo. Будь ласка, відвідайте новий сайт."],
+ ["pl","Polski","„realdata.pro/english/” i „realdata.pro/” przeniosły się na maid-cafe.tokyo. Odwiedź nową stronę."],
+ ["nl","Nederlands","‘realdata.pro/english/’ en ‘realdata.pro/’ zijn verhuisd naar maid-cafe.tokyo. Bezoek de nieuwe site."],
+ ["sv","Svenska","”realdata.pro/english/” och ”realdata.pro/” har flyttat till maid-cafe.tokyo. Besök den nya webbplatsen."],
+ ["da","Dansk","»realdata.pro/english/« og »realdata.pro/« er flyttet til maid-cafe.tokyo. Besøg det nye websted."],
+ ["no","Norsk","«realdata.pro/english/» og «realdata.pro/» har flyttet til maid-cafe.tokyo. Besøk det nye nettstedet."],
+ ["fi","Suomi","”realdata.pro/english/” ja ”realdata.pro/” ovat muuttaneet osoitteeseen maid-cafe.tokyo. Käy uudella sivustolla."],
+ ["cs","Čeština","„realdata.pro/english/“ a „realdata.pro/“ se přestěhovaly na maid-cafe.tokyo. Navštivte nový web."],
+ ["sk","Slovenčina","„realdata.pro/english/“ a „realdata.pro/“ sa presťahovali na maid-cafe.tokyo. Navštívte nový web."],
+ ["hu","Magyar","Az „realdata.pro/english/” és a „realdata.pro/” átköltözött a maid-cafe.tokyo oldalra. Látogasson el az új oldalra."],
+ ["ro","Română","„realdata.pro/english/” și „realdata.pro/” s-au mutat pe maid-cafe.tokyo. Vizitați noul site."],
+ ["bg","Български","„realdata.pro/english/“ и „realdata.pro/“ се преместиха на maid-cafe.tokyo. Моля, посетете новия сайт."],
+ ["el","Ελληνικά","Τα «realdata.pro/english/» και «realdata.pro/» μετακόμισαν στο maid-cafe.tokyo. Επισκεφθείτε τον νέο ιστότοπο."],
+ ["tr","Türkçe","“realdata.pro/english/” ve “realdata.pro/”, maid-cafe.tokyo adresine taşındı. Lütfen yeni siteyi ziyaret edin."],
+ ["ar","العربية","انتقل «realdata.pro/english/» و«realdata.pro/» إلى maid-cafe.tokyo. يرجى زيارة الموقع الجديد."],
+ ["he","עברית","‏„realdata.pro/english/” ו-„realdata.pro/” עברו אל maid-cafe.tokyo. אנא בקרו באתר החדש."],
+ ["fa","فارسی","«realdata.pro/english/» و «realdata.pro/» به maid-cafe.tokyo منتقل شدند. لطفاً از سایت جدید دیدن کنید."],
+ ["ur","اردو","«realdata.pro/english/» اور «realdata.pro/» maid-cafe.tokyo پر منتقل ہو گئے ہیں۔ براہ کرم نئی سائٹ ملاحظہ کریں۔"],
+ ["hi","हिन्दी","“realdata.pro/english/” और “realdata.pro/” maid-cafe.tokyo पर चले गए हैं। कृपया नई साइट पर जाएँ।"],
+ ["bn","বাংলা","“realdata.pro/english/” এবং “realdata.pro/” maid-cafe.tokyo-তে স্থানান্তরিত হয়েছে। অনুগ্রহ করে নতুন সাইটে যান।"],
+ ["ta","தமிழ்","“realdata.pro/english/” மற்றும் “realdata.pro/” maid-cafe.tokyo க்கு மாற்றப்பட்டுள்ளன. புதிய தளத்தைப் பார்வையிடவும்."],
+ ["te","తెలుగు","“realdata.pro/english/”, “realdata.pro/” maid-cafe.tokyoకి మారాయి. దయచేసి కొత్త సైట్‌ను సందర్శించండి."],
+ ["mr","मराठी","“realdata.pro/english/” आणि “realdata.pro/” maid-cafe.tokyo वर हलवले आहेत. कृपया नवीन साइटला भेट द्या."],
+ ["th","ไทย","“realdata.pro/english/” และ “realdata.pro/” ย้ายไปที่ maid-cafe.tokyo แล้ว โปรดเยี่ยมชมเว็บไซต์ใหม่"],
+ ["vi","Tiếng Việt","“realdata.pro/english/” và “realdata.pro/” đã chuyển sang maid-cafe.tokyo. Vui lòng truy cập trang mới."],
+ ["id","Bahasa Indonesia","“realdata.pro/english/” dan “realdata.pro/” telah pindah ke maid-cafe.tokyo. Silakan kunjungi situs baru."],
+ ["ms","Bahasa Melayu","“realdata.pro/english/” dan “realdata.pro/” telah berpindah ke maid-cafe.tokyo. Sila lawati laman baharu."],
+ ["fil","Filipino","Lumipat na sa maid-cafe.tokyo ang “realdata.pro/english/” at “realdata.pro/”. Pakibisita ang bagong site."],
+ ["sw","Kiswahili","“realdata.pro/english/” na “realdata.pro/” zimehamia maid-cafe.tokyo. Tafadhali tembelea tovuti mpya."],
+ ["af","Afrikaans","“realdata.pro/english/” en “realdata.pro/” het na maid-cafe.tokyo verskuif. Besoek asseblief die nuwe webwerf."],
+ ["am","አማርኛ","“realdata.pro/english/” እና “realdata.pro/” ወደ maid-cafe.tokyo ተዛውረዋል። እባክዎ አዲሱን ድር ጣቢያ ይጎብኙ።"],
+ ["ne","नेपाली","“realdata.pro/english/” र “realdata.pro/” maid-cafe.tokyo मा सरेका छन्। कृपया नयाँ साइट हेर्नुहोस्।"],
+ ["my","မြန်မာ","“realdata.pro/english/” နှင့် “realdata.pro/” တို့ကို maid-cafe.tokyo သို့ ပြောင်းရွှေ့ပြီးဖြစ်ပါသည်။ ဆိုဒ်အသစ်သို့ ဝင်ရောက်ကြည့်ရှုပါ။"],
+ ["km","ខ្មែរ","“realdata.pro/english/” និង “realdata.pro/” បានផ្លាស់ទៅ maid-cafe.tokyo ហើយ។ សូមចូលទស្សនាគេហទំព័រថ្មី។"],
+ ["mn","Монгол","“realdata.pro/english/” болон “realdata.pro/” maid-cafe.tokyo руу нүүлээ. Шинэ сайтаар зочилно уу."],
+ ["ka","ქართული","„realdata.pro/english/“ და „realdata.pro/“ გადავიდა maid-cafe.tokyo-ზე. გთხოვთ, ეწვიოთ ახალ საიტს."],
+ ["hy","Հայերեն","«realdata.pro/english/»-ը և «realdata.pro/»-ը տեղափոխվել են maid-cafe.tokyo: Այցելեք նոր կայք։"],
+ ["kk","Қазақша","«realdata.pro/english/» және «realdata.pro/» maid-cafe.tokyo сайтына көшті. Жаңа сайтқа кіріңіз."],
+ ["uz","Oʻzbekcha","“realdata.pro/english/” va “realdata.pro/” maid-cafe.tokyo ga koʻchdi. Iltimos, yangi saytga tashrif buyuring."],
+ ["az","Azərbaycanca","“realdata.pro/english/” və “realdata.pro/” maid-cafe.tokyo ünvanına köçdü. Zəhmət olmasa yeni saytı ziyarət edin."],
+ ["sr","Српски","„realdata.pro/english/“ и „realdata.pro/“ су пресељени на maid-cafe.tokyo. Посетите нови сајт."],
+ ["hr","Hrvatski","„realdata.pro/english/” i „realdata.pro/” preselili su na maid-cafe.tokyo. Posjetite novu stranicu."],
+ ["sl","Slovenščina","»realdata.pro/english/« in »realdata.pro/« sta se preselila na maid-cafe.tokyo. Obiščite novo spletno mesto."],
+ ["lt","Lietuvių","„realdata.pro/english/“ ir „realdata.pro/“ persikėlė į maid-cafe.tokyo. Aplankykite naują svetainę."],
+ ["lv","Latviešu","“realdata.pro/english/” un “realdata.pro/” ir pārcēlušies uz maid-cafe.tokyo. Lūdzu, apmeklējiet jauno vietni."],
+ ["et","Eesti","„realdata.pro/english/” ja „realdata.pro/” on kolinud aadressile maid-cafe.tokyo. Palun külastage uut saiti."],
+ ["is","Íslenska","„realdata.pro/english/“ og „realdata.pro/“ hafa flutt á maid-cafe.tokyo. Vinsamlegast farðu á nýja vefinn."],
+ ["ga","Gaeilge","Tá “realdata.pro/english/” agus “realdata.pro/” bogtha go maid-cafe.tokyo. Tabhair cuairt ar an suíomh nua."],
+ ["cy","Cymraeg","Mae “realdata.pro/english/” a “realdata.pro/” wedi symud i maid-cafe.tokyo. Ewch i'r wefan newydd."],
+ ["ca","Català","«realdata.pro/english/» i «realdata.pro/» s'han traslladat a maid-cafe.tokyo. Visiteu el nou lloc."],
+ ["eu","Euskara","“realdata.pro/english/” eta “realdata.pro/” maid-cafe.tokyo-ra aldatu dira. Bisitatu webgune berria."],
+ ["gl","Galego","«realdata.pro/english/» e «realdata.pro/» mudáronse a maid-cafe.tokyo. Visita o novo sitio."],
+ ["la","Latina","«realdata.pro/english/» et «realdata.pro/» ad maid-cafe.tokyo migraverunt. Novam paginam visita."]
+];
+var RTL = {ar:1, he:1, fa:1, ur:1};
+// 案内文の「引っ越した元」の名前を、いま開いているURL自身に合わせる(easy-web.tokyo/open-english/ で
+// 「realdata.pro/english/ は引っ越しました」と出ると不正確なため)。realdata.pro/english/ で開けば元の文のまま。
+var HERE = location.hostname + (location.pathname.replace(/index.html$/, "") || "/");
+function here(t) { return t.split("realdata.pro/english/").join(HERE); }
+function pick() {
+  var prefs = (navigator.languages && navigator.languages.length) ? navigator.languages : [navigator.language || "en"];
+  for (var i = 0; i < prefs.length; i++) {
+    var p = String(prefs[i]).toLowerCase();
+    for (var j = 0; j < L.length; j++) if (L[j][0].toLowerCase() === p) return L[j];
+    var base = p.split("-")[0];
+    for (var k = 0; k < L.length; k++) if (L[k][0].toLowerCase().split("-")[0] === base) return L[k];
+  }
+  return L[1];
+}
+function show(item) {
+  var rtl = RTL[item[0].split("-")[0]];
+  var lead = document.getElementById("lead");
+  lead.lang = item[0]; lead.dir = rtl ? "rtl" : "ltr";
+  document.documentElement.lang = item[0];
+  document.getElementById("msg").textContent = here(item[2]);
+  document.getElementById("langname").textContent = item[1];
+}
+var list = document.getElementById("list");
+L.forEach(function (it) {
+  var li = document.createElement("li");
+  var b = document.createElement("b"); b.textContent = it[1];
+  var p = document.createElement("span"); p.textContent = here(it[2]); p.lang = it[0]; p.dir = RTL[it[0].split("-")[0]] ? "rtl" : "ltr";
+  p.style.display = "block";
+  li.appendChild(b); li.appendChild(p); list.appendChild(li);
+});
+show(pick());
+</script>
+</body>
+</html>

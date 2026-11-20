@@ -1,0 +1,41 @@
+[package]
+name = "rrd-server"
+description = "realdata.pro サーバー: RPoem(open-runo-poem-compat)上で GraphQL 単一エンドポイントと Web UI を提供する"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rrd-server"
+path = "src/main.rs"
+
+[dependencies]
+rrd-core = { path = "../rrd-core" }
+rrd-compute = { path = "../rrd-compute" }
+rrd-render = { path = "../rrd-render" }
+rrd-tune = { path = "../rrd-tune" }
+opencuda-core = { path = "../../../../open-cuda/crates/opencuda-core" }
+base64 = "0.23"
+# RPoem は deps.lock でコミット固定し .deps/ に取得したものを使う(scripts/fetch-deps)。
+open-runo-poem-compat = { path = "../../../../RPoem/crates/open-runo-poem-compat" }
+async-graphql = "7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rust-json = { path = "../../../../RS-JSON" }
+sonic-rs = "0.5"
+http-body-util = "0.1"
+bytes = "1"
+anyhow = "1"
+futures = "0.3"
+# 調査対象 URL の取得と aruaru-llm 呼び出し(エコシステム既定の rustls、OpenSSL 不要)
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "form"] }
+scraper = "0.29"
+# 財務省の国債金利 CSV(Shift_JIS)を読むため
+encoding_rs = "0.8"
+# aruaru-db(pgwire 互換)への接続・永続化と版管理
+tokio-postgres = "0.7"
+# 地名データ(GeoNames の都市一覧 zip)を読むため
+zip = { version = "9", default-features = false, features = ["deflate"] }

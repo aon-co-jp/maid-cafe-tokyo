@@ -1,0 +1,120 @@
+[package]
+name = "open-english-server"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "open-englishの静的フロントエンド(index.html/style.css/app.js等)をRPoem(open-runo-poem-compat)で配信するローカルサーバー。file://やpython3 -m http.serverへの依存を解消し、auto-update.jsのfetch()が確実に動作するようにする。"
+
+[dependencies]
+open-runo-poem-compat = { path = "../../../RPoem/crates/open-runo-poem-compat", features = ["tls"] }
+# 声の後処理(先生=メイド風、ヘルパー=太く低い男性)。RPoemの共有クレート(2026-09-30新設、`RPoem/docs/voice.md`)
+open-runo-voice = { path = "../../../RPoem/crates/open-runo-voice" }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process", "time", "sync"] }
+# 自動アップデート機能(2026-08-11追加、ユーザー指示「起動時の自動
+# メンテナンスで自動UPDATEの自動バージョンアップ機能も搭載して、
+# 自動でGithubから最新版を見つけて古いのは自動でアンインストールして
+# 最新版を自動インストールする機能を搭載して」)向け。GitHub Releases
+# APIの問い合わせ+インストーラーアセットのダウンロードに使う
+# (OpenSSL不要のrustls-tls、他リポジトリの既定方針と同じ)。
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+schemars = "1"
+anyhow = "1"
+# 会話履歴・設定の永続化(2026-08-18追加、ユーザー指示「DATABASEは…
+# 本格的なローカルデータベース化してから」への対応)。常時利用可能な
+# ローカルコピーとしてSQLite(`bundled` featureで静的リンク、利用者の
+# 環境にシステムSQLiteが入っているかに依存しない)を必須の基盤とし、
+# `aruaru-db`(PostgreSQL、自身のDUAL_DATABASE_URL機能で自己修復する
+# 冗長化構成を持つ)を設定されていればオプトインでミラー先として使う
+# (`aruaru-llm`側`geo_content.rs`と同じ`tokio-postgres`直結パターン)。
+rusqlite = { version = "0.32", features = ["bundled"] }
+# 世界情勢Q&A(2026-10-29): 報道機関のRSS/Atom/RDFの読み取りと、日付の変換
+roxmltree = "0.20"
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+tokio-postgres = "0.7"
+# DBミラー接続のTLS対応(2026-08-24追加、ユーザー指示「sslmode=require等の
+# PostgreSQL標準的な接続オプションに対応してほしい」への対応)。OpenSSL
+# 不要のrustls経路を選ぶ(このリポジトリの既定方針、reqwestも
+# rustls-tlsで統一済み)。実際にTLSハンドシェイクするかどうかは接続
+# 文字列の`sslmode`をtokio-postgres自身が解釈して決めるため、
+# `sslmode=disable`(既定)の既存接続は挙動が変わらない。
+tokio-postgres-rustls = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-native-certs = "0.7"
+webpki-roots = "0.26"
+# world-lab Phase B TLS(2026-08-25追加): `open_runo_poem_compat::
+# hyper_compat::tls`のAPIが`tokio_rustls::rustls::*`型を返すため、
+# main.rs側でも同じ経路(`tokio_rustls::rustls`)で型を参照できるよう
+# 直接依存として追加(既存の`rustls`依存とバージョンは揃えてあるため
+# 同一の型として扱われる)。
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+# /v1/db/*のHTTPボディ処理(2026-08-18追加、ユーザー指摘「HTTPボディ処理は
+# 対象外とはどういう事？」への対応)。過去のHANDOFFにあった「RS-JSONは
+# 埋め込み/静的JSONファイル向けのみ」という整理は、Rust-JSON側の実際の
+# API(`from_slice_strict<T: DeserializeOwned>`/`to_vec_strict<T: Serialize>`
+# ——RPC/wire formatの型付き入出力を明示的に想定した関数)を踏まえると
+# 過度に狭い解釈だったため撤回し、この新規HTTPエンドポイントでは実際に
+# RS-JSONの厳密モード(`parse_strict`と同じRFC 8259検証)を経由させる。
+rust-json = { path = "../../../RS-JSON", features = ["fast"] }
+# CPU命令セット(AVX2/AVX-512/PCLMULQDQ/AES-NI等)のランタイム検出。
+# aon-co-jpエコシステム共通のライブラリクレート(2026-08-22導入)。
+# /v1/cpu-runtime エンドポイントと起動ログで使用する。
+open-cpu = { path = "../../../open-cpu" }
+bytes = "1.9"
+http-body-util = "0.1"
+hyper = { version = "1.10", features = ["full"] }
+# AIプログラミング支援バックエンド(2026-08-20新設、ユーザー指示
+# 「VPSへの自動読み書き・GitHubへの自動読み書き・ローカルドライブへの
+# 常駐エージェント読み書きをサーバー側で実装」への対応)向け。
+# VPS連携: 純RustのSSHクライアント(`russh`、非同期・tokio対応、
+# libssh2/OpenSSLへのCバインディング〈ssh2クレート〉と違いvcpkg等の
+# 追加ネイティブ依存が要らずクロスプラットフォームで扱いやすいため採用)。
+# 鍵ファイルの読み込みには`russh-keys`を使う。
+russh = "0.63"
+async-trait = "0.1"
+# GitHubのContents API(Base64エンコードされたファイル内容)を扱うため。
+base64 = "0.22"
+# world-lab Phase 2(2026-08-24追加、`world_lab.rs`モジュールdoc参照):
+# 遊休CPU/GPU/NPUを共有する際に、他者から受け取ったコードを安全に実行する
+# ためのWASMサンドボックス。**ホスト関数(WASI等)は一切linkしない**設計
+# とするため、この依存を追加しただけではファイルシステム/ネットワークへの
+# アクセス能力は一切guestコードに与わらない(サンドボックスの安全性は
+# 「どの機能を有効化するか」ではなく「どのホスト関数をimportとして
+# linkするか」で決まる——本リポジトリでは空のLinkerしか使わない)。
+wasmtime = "48"
+# world-lab Phase B TLS(2026-08-25追加): ペアリング/計算タスクAPIを
+# 平文HTTPのまま残さないための、開発/ローカル検証用の自己署名証明書
+# 生成(`rcgen`、RPoem/RS-SmartTCPの既存TLSテストと同じ用途・同じ
+# クレート)。**独自の暗号/TLS実装は一切追加しない**——実際のTLS
+# ハンドシェイクは`open_runo_poem_compat::hyper_compat::tls`
+# (rustls、上記`tls` feature経由で有効化)に完全に委譲する。本番運用の
+# 正式な証明書(Let's Encrypt等)は別途`OPEN_ENGLISH_TLS_CERT_PATH`/
+# `OPEN_ENGLISH_TLS_KEY_PATH`で用意されたPEMファイルを指すことを想定
+# しており、`rcgen`はその正式な証明書が無い場合の開発用フォールバック
+# としてのみ使う(`world_lab.rs`と同様「本番向けではない」旨をコード内
+# doc・CLAUDE.mdの両方で明記する)。
+rcgen = "0.13"
+lettre = { version = "0.11.19", default-features = false, features = ["smtp-transport", "tokio1-rustls-tls", "builder", "pool"] }
+ring = "0.17.14"
+# 携帯電話(認証アプリ)でのQRコード撮影による2FA(2026-08-27追加、
+# ユーザー指示「メールアドレス1と2と携帯電話番号の3種類を入力するように
+# 仕様変更して、携帯電話番号はQRコードを撮影する2FAとして」への対応)。
+# rs-sync側で既に実機検証済みの実装(`rs-sync/src/totp.rs`、HMAC-SHA1+
+# base32を自前実装、外部totp専用クレートには依存しない設計)をそのまま
+# 移植する。
+hmac = "0.12"
+sha2 = "0.10"
+sha1 = "0.10"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+
+[features]
+# VPS(GPUの無いレンタルサーバー)のCPUでKokoro(日本語)を合成する。辞書(UniDic)とONNX Runtimeを内蔵するため
+# バイナリが約230MB増える。通常の配布ビルド(PC・インストーラー)には付けない。
+kokoro = ["dep:kokoro-ja"]
+
+[dependencies.kokoro-ja]
+git = "https://github.com/aon-co-jp/rs-kokoro-ja"
+rev = "a0713f771f756556ab6654d9edd58bd30459a221"
+features = ["engine"]
+optional = true
