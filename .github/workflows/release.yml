@@ -17,8 +17,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: |
-            work/open-english/server/target
-            work/realdata.pro/target
+            english/server/target
+            realdata/target
             ~/.cargo/registry
           key: build-${{ hashFiles('deps.lock') }}
           restore-keys: build-
