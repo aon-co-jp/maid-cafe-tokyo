@@ -44,6 +44,8 @@
 <h2>使い方</h2>
 <ol><li>コードを選び、右クリック→「Maid Cafe: Mark selection with a colour」(Ctrl+Alt+M)で色を付けます。</li><li>「Maid Cafe: Ask AI about a colour's ranges」で色を選び質問します(選んだ範囲だけが送られます)。選択範囲だけで聞くなら Ctrl+Alt+Q。</li><li>答えのあとに続きの質問、右クリックから説明・修正・テスト作成。修正は差分で見て、承認してから適用されます。</li><li>無料AI(aruaru-llm)が既定です。ChatGPT・Gemini・DeepSeek・Grok・Claude は、ご自身のAPIキーを設定して使います(キーはVS CodeのSecretStorageに保管)。</li><li>案件・求人の取り込みと、要件→設計→実装→デバッグの各段階は「Maid Cafe: Import job / project information」「Maid Cafe: Project step」から。</li></ol>
 <div class="note"><strong>現在の状況(正直に)</strong>: プレビュー版です。ソースは <a href="https://github.com/aon-co-jp/maid-cafe-vsc">GitHub</a>。</div>
+<h2>メイドカフェ英会話と第3言語</h2>
+<p>メイドの口調で英語を練習できます。間違いはやさしく直し、日本語訳つき。日本語・英語に加えて、世界の約40言語から<strong>第3言語</strong>を選ぶと、AIの回答や会話がその言語でもネイティブに近い自然な文で出ます(コードは訳しません)。無料は aruaru-llm の翻訳(M2M100、MITライセンス)、出来が悪いときは自分で契約したAIに自動で切り替えられます。※ 無料AIの会話は短く質が高くないので、本格的に練習するなら有料AI(自分の契約)がおすすめです。</p>
 <h2>これから作る機能</h2>
 <p>会話の履歴と続きの質問 / 「説明・修正・テスト作成」のワンクリック / 修正案を差分で見て適用 / 教室の課題をVS Code内で解いて自動採点 / 送信ログ / オフラインのローカルモデル など。</p>
 
@@ -76,6 +78,8 @@
 <h2 lang="en">How to use</h2>
 <ol lang="en"><li>Select code, right-click, "Maid Cafe: Mark selection with a colour" (Ctrl+Alt+M).</li><li>Run "Maid Cafe: Ask AI about a colour's ranges", pick a colour and ask (only the marked ranges are sent). Ctrl+Alt+Q asks about the current selection.</li><li>Ask follow-ups after an answer; Explain / Fix / Write tests from the right-click menu. Fixes are shown as a diff and applied only after you approve.</li><li>The free AI (aruaru-llm) is the default. For ChatGPT, Gemini, DeepSeek, Grok or Claude set your own API key (kept in VS Code SecretStorage).</li><li>Job/project import and the requirements, design, implementation and debug steps are under "Maid Cafe: Import job / project information" and "Maid Cafe: Project step".</li></ol>
 <div class="note" lang="en"><strong>Current status (honestly)</strong>: preview release. Source on <a href="https://github.com/aon-co-jp/maid-cafe-vsc">GitHub</a>.</div>
+<h2 lang="en">Maid-cafe English and a third language</h2>
+<p lang="en">Practice English with a maid-cafe partner who gently corrects your mistakes and adds a Japanese gloss. Besides Japanese and English, pick a <strong>third language</strong> from about 40 world languages and every AI answer and conversation reply is also shown in natural, native-like wording (code is never translated). Free translation uses aruaru-llm (M2M100, MIT license); if it looks poor, it can switch to the AI you contracted yourself. Note: the free AI's chat is short and basic, so for serious practice a paid AI (your own contract) is recommended.</p>
 <h2 lang="en">Coming next</h2>
 <p lang="en">Chat history and follow-ups, one-click explain/fix/test, applying fixes as diffs, solving school exercises in VS Code with auto-grading, a sent-data log, offline local models, and more.</p>
 </body>
