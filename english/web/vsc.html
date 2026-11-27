@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>maid-cafe-vsc — VS Code 拡張 / VS Code extension</title>
+<style>
+ body{font-family:system-ui,"Hiragino Sans","Yu Gothic",sans-serif;max-width:46rem;margin:0 auto;padding:1rem 1.2rem 3rem;line-height:1.75;color:#222;background:#fffaf5}
+ h1{font-size:1.6rem;margin:.6rem 0} h2{font-size:1.2rem;margin-top:1.8rem;border-left:.4rem solid #ff7aa8;padding-left:.6rem}
+ .note{background:#fff0f5;border:1px solid #ffc2d6;border-radius:.6rem;padding:.7rem 1rem}
+ .sw{display:inline-block;width:1rem;height:1rem;border-radius:50%;vertical-align:-.15rem;margin-right:.15rem}
+ hr{border:0;border-top:1px dashed #ccb;margin:2.2rem 0} a{color:#c2185b} code{background:#f3eee8;padding:.05rem .3rem;border-radius:.25rem}
+</style>
+</head>
+<body>
+<p><a href="/">← maid-cafe.tokyo</a></p>
+<h1>🎀 maid-cafe-vsc <small>(VS Code 拡張)</small></h1>
+
+<h2>日本語</h2>
+<p><strong>コードに「好きな色」をつけて、そのままAIに質問できる、VS Code の拡張機能です。</strong></p>
+<ol>
+ <li>VS Code でコードを<strong>マウスやカーソルで選ぶ</strong>。</li>
+ <li><span class="sw" style="background:#ffdc00"></span><span class="sw" style="background:#ff4646"></span><span class="sw" style="background:#3cc85a"></span><span class="sw" style="background:#4682ff"></span>好きな<strong>色</strong>で印をつける(右クリック、または <code>Ctrl+Alt+M</code>)。</li>
+ <li>「この色の部分について」と<strong>質問</strong>すると、同じ色の範囲がまとめてAIに届きます。</li>
+</ol>
+<p>たとえば「赤=バグが疑わしい所」「青=意味が分からない所」のように、色で分けて聞けます。</p>
+<h2>使えるAI</h2>
+<ul>
+ <li><strong>無料</strong>: aruaru-search + aruaru-llm(このサイトのAI)。</li>
+ <li><strong>有料</strong>: ChatGPT・Gemini・DeepSeek・Grok・Claude は、<strong>ご自身で各社と契約</strong>して、ご自分のAPIキーを設定してお使いください。キーはお使いのVS Codeの中だけに保管されます。私たちは料金や決済を扱いません。</li>
+</ul>
+<h2>安心のしくみ</h2>
+<ul>
+ <li>送る前に、パスワード・鍵・トークンらしい文字を<strong>自動で伏せます</strong>。</li>
+ <li>何を送るかを<strong>毎回確認</strong>できます(設定でオフにもできます)。</li>
+ <li>選んだ範囲だけが送られ、プロジェクト全体は送りません。</li>
+</ul>
+<h2>プログラミング教室・質問と回答</h2>
+<p>拡張のコマンドから、<a href="/">maid-cafe.tokyo の質問と回答</a>と<a href="/school/">プログラミング教室</a>をすぐ開けます。</p>
+<div class="note"><strong>現在の状況(正直に)</strong>: まだ<strong>開発中のプレビュー</strong>で、ダウンロード用のファイルは公開していません。部品のテストは通っていますが、VS Code 上での実機確認とAI各社への実通信の確認はこれからです。公開したらこのページにダウンロードを載せます。</div>
+<h2>これから作る機能</h2>
+<p>会話の履歴と続きの質問 / 「説明・修正・テスト作成」のワンクリック / 修正案を差分で見て適用 / 教室の課題をVS Code内で解いて自動採点 / 送信ログ / オフラインのローカルモデル など。</p>
+
+<hr />
+<h2 lang="en">English</h2>
+<p lang="en"><strong>A VS Code extension that lets you mark code with any colour and ask an AI about it right away.</strong></p>
+<ol lang="en">
+ <li><strong>Select code</strong> in VS Code with the mouse or cursor.</li>
+ <li><strong>Mark it with a colour</strong> you like (right-click, or <code>Ctrl+Alt+M</code>).</li>
+ <li><strong>Ask a question</strong> about a colour: every range with that colour is sent to the AI together.</li>
+</ol>
+<p lang="en">For example: red = "looks buggy", blue = "I do not understand this". Colours let you ask about each group separately.</p>
+<h2 lang="en">Which AI</h2>
+<ul lang="en">
+ <li><strong>Free</strong>: aruaru-search + aruaru-llm (this site's AI).</li>
+ <li><strong>Paid</strong>: ChatGPT, Gemini, DeepSeek, Grok and Claude — <strong>you sign up with each provider yourself</strong> and enter your own API key. The key stays inside your VS Code. We handle no billing or payments.</li>
+</ul>
+<h2 lang="en">Safety</h2>
+<ul lang="en">
+ <li>Passwords, keys and tokens in the code are <strong>masked automatically</strong> before sending.</li>
+ <li>You can <strong>confirm what is sent</strong> every time (switchable in settings).</li>
+ <li>Only the marked ranges are sent, never the whole project.</li>
+</ul>
+<h2 lang="en">Programming school and Q&amp;A</h2>
+<p lang="en">Commands in the extension open the <a href="/">maid-cafe.tokyo Q&amp;A</a> and the <a href="/school/">programming school</a>.</p>
+<div class="note" lang="en"><strong>Current status (honestly)</strong>: this is a <strong>development preview</strong> and there is no download yet. The building blocks are tested, but checks inside real VS Code and against the real AI providers are still to do. A download will be added here when it is released.</div>
+<h2 lang="en">Coming next</h2>
+<p lang="en">Chat history and follow-ups, one-click explain/fix/test, applying fixes as diffs, solving school exercises in VS Code with auto-grading, a sent-data log, offline local models, and more.</p>
+</body>
+</html>
